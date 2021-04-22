@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import *
 import ifcopenshell
 
 
-class Window(QWidget):
+class ViewTree(QWidget):
 	def __init__(self):
 		QWidget.__init__(self)
 		# Prepare Tree Widgets in a stretchable layout
@@ -136,7 +136,7 @@ if __name__ == '__main__':
 	else:
 		app = QApplication(sys.argv)
 
-	w = Window()
+	w = ViewTree()
 	w.resize(600, 800)
 	filename = sys.argv[1]
 	if os.path.isfile(filename):
