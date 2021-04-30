@@ -1,7 +1,6 @@
 import sys
 import time
 import os.path
-# import numpy as np
 import struct
 import multiprocessing
 
