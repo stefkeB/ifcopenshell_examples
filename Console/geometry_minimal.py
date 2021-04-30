@@ -6,6 +6,7 @@ import ifcopenshell.geom
 def parse_shape(shape):
     geometry = shape.geometry
     print("id(shape):", str(shape.id))
+    print("guid:     ", str(shape.guid))
     print("id(geom): ", str(geometry.id))
     vertices = [geometry.verts[i: i + 3] for i in range(0, len(geometry.verts), 3)]
     print("vertices: ", vertices)
