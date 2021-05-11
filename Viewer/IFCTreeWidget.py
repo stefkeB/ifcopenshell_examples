@@ -15,9 +15,10 @@ import ifcopenshell
 
 class IFCTreeWidget(QWidget):
 	"""
-	Second version of the Basic Tree View
-	- V1 = Single Tree (object tree with basic spatial hierarchy)
+	Third version of the Basic Tree View
+	- V1 = Single Tree (object + basic hierachy)
 	- V2 = Double Tree (object with type, properties/quantities + attributes)
+	- V3 = Support for Selection Signals (to be linked to 3D view)
 	"""
 	def __init__(self):
 		QWidget.__init__(self)
@@ -32,11 +33,43 @@ class IFCTreeWidget(QWidget):
 		self.object_tree.setHeaderLabels(["Name", "Class", "ID"])
 		self.object_tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
 		self.object_tree.selectionModel().selectionChanged.connect(self.add_data)
+		self.object_tree.selectionModel().selectionChanged.connect(self.send_selection)
 		# Property Tree
 		self.property_tree = QTreeWidget()
 		vbox.addWidget(self.property_tree)
 		self.property_tree.setColumnCount(3)
 		self.property_tree.setHeaderLabels(["Name", "Value", "ID/Type"])
+
+	select_object = pyqtSignal(object)
+	deselect_object = pyqtSignal(object)
+
+	def send_selection(self, selected_items, deselected_items):
+		print("treeview.send_selection ", selected_items)
+		items = self.object_tree.selectedItems()
+		for item in items:
+			if item.text(2) != '':
+				self.select_object.emit(item.text(2))
+
+		# send the deselected items as well
+		for index in deselected_items.indexes():
+			if index.column() == 0:  # only for first column, to avoid repeats
+				item = self.object_tree.itemFromIndex(index)
+				if item.text(2) != '':
+					self.deselect_object.emit(item.text(2))
+
+	def receive_selection(self, ids):
+		print("treeview.receive_selection ", ids)
+		self.object_tree.clearSelection()
+		if not len(ids):
+			return
+		# for id in ids:
+		items = self.object_tree.findItems(str(ids), Qt.MatchContains | Qt.MatchRecursive, 2)
+		for item in items:
+			if item.text(2) == ids:
+				item.setSelected(not item.isSelected())
+				# self.object_tree.currentItem()
+				index = self.object_tree.indexFromItem(item)
+				self.object_tree.scrollTo(index)
 
 	def load_file(self, filename):
 		# Import the IFC File

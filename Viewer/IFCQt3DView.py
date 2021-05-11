@@ -54,8 +54,15 @@ class IFCQt3dView(QWidget):
     """
     3D View Widget
     - V1 = IFC File Loading, geometry parsing & basic navigation
-    - V2 = with Edges
+    - V2 = Adding Edges display
+    - V3 = Draw Origin Axes & Grid
+    - V4 = Object Picking & Selection Syncing (+ reorganise scenegraph)
     """
+
+    # Two signals to extend or shrink the selection
+    add_to_selected_entities = pyqtSignal(str)
+    remove_from_selected_entities = pyqtSignal(str)
+
     def __init__(self):
         QWidget.__init__(self)
 
@@ -72,33 +79,243 @@ class IFCQt3dView(QWidget):
 
         # Prepare our scene
         self.root = QEntity()
+        self.root.setObjectName("Root")
+        self.scene = QEntity()
+        self.scene.setObjectName("Scene")
+        self.scene.setParent(self.root)
+        self.grids = QEntity()
+        self.grids.setObjectName("Grids")
+        self.grids.setParent(self.scene)
+        self.grids.setProperty("IsProduct", True)
+
+        self.selections = QEntity()
+        self.selections.setObjectName("Selected")
+        self.selections.setProperty("IsProduct", True)
+        self.selections.setParent(self.root)
+        self.phong = QGoochMaterial()  # QDiffuseSpecularMaterial()
+        self.phong.setObjectName("Shared Diffuse Specular Material")
+        self.phong.setShareable(True)
+        self.phong.setDiffuse(QColor(50, 250, 50))
+        self.phong.setShininess(0.5)
+        self.scene.addComponent(self.phong)
+
+        self.unselected = QEntity()
+        self.unselected.setObjectName("Unselected")
+        self.unselected.setProperty("IsProduct", True)
+        self.unselected.setParent(self.root)
         self.material = QPerVertexColorMaterial()
-        self.root.addComponent(self.material)
+        self.material.setObjectName("Shared Vertex Color Material")
+        self.scene.addComponent(self.material)
         self.material.setShareable(True)
+
+        self.transparent = QDiffuseSpecularMaterial()
+        self.transparent.setObjectName("Transparent Material")
+        self.transparent.setShareable(True)
+        self.transparent.setAlphaBlendingEnabled(True)
+        self.transparent.setDiffuse(QColor(230, 230, 250, 150))
+        # self.transparent.setShininess(150)
+        self.scene.addComponent(self.transparent)
+
+        self.wireframe = QEntity()
+        self.wireframe.setObjectName("Wireframe")
+        self.wireframe.setProperty("IsProduct", True)
+        self.wireframe.setParent(self.root)
         self.edge_material = QDiffuseSpecularMaterial()
-        self.root.addComponent(self.edge_material)
+        self.edge_material.setObjectName("Shared Lines Material")
         self.edge_material.setShareable(True)
         self.edge_material.setDiffuse(QColor(50, 50, 50))
+        self.scene.addComponent(self.edge_material)
+
         self.initialise_camera()
+        self.create_light()
         self.view.setRootEntity(self.root)
+
+        # Axes & Grid
+        self.generate_axis(5)
+        self.generate_grid(10)
+
+        # Scene Graph
+        self.scene_graph = QTreeWidget()
+        self.scene_graph.setColumnCount(2)
+        self.scene_graph.setHeaderLabels(["Object Name", "Class"])
+        # self.scene_graph.selectionModel().selectionChanged.connect(self.toggle_visibility)
+        # self.scene_graph.itemChanged.connect(self.toggle_visibility)  # is emitted on almost everything!
+        self.scene_graph.itemChanged[QTreeWidgetItem, int].connect(self.toggle_visibility)
+        # self.scene_graph.itemPressed.connect(self.toggle_visibility)
+
+        # picking
+        render_settings = self.view.renderSettings()
+        picking_settings = render_settings.pickingSettings()
+        self.picker = QObjectPicker(self.scene)
+        self.picker.setObjectName("Picker")
+        self.picker.setProperty("IsProduct", True)
+        picking_settings.setFaceOrientationPickingMode(QPickingSettings.FrontAndBackFace)
+        # set QObjectPicker to PointPicking:
+        picking_settings.setPickMethod(QPickingSettings.TrianglePicking)
+        # picking_settings.setPickMethod(QPickingSettings.PointPicking)
+        # picking_settings.setPickResultMode(QPickingSettings.NearestPick)
+        # picking_settings.setWorldSpaceTolerance(.5)
+        # self.picker.setHoverEnabled(True)
+        # self.picker.setDragEnabled(True)
+        # self.picker.moved.connect(self.pick)
+        # self.picker.pressed.connect(self.pick)
+        self.picker.clicked.connect(self.pick)
+        # self.picker.released.connect(self.pick)
+        self.root.addComponent(self.picker)
 
         # Finish GUI
         layout = QHBoxLayout()
-        layout.addWidget(self.container)
+        # Splitter
+        splitter = QSplitter(Qt.Horizontal)
+        layout.addWidget(splitter)
+        splitter.addWidget(self.container)
+        splitter.addWidget(self.scene_graph)
         self.setLayout(layout)
+
+    def select_object_by_id(self, object_id):
+        print("View3D.select_object_by_id ", object_id)
+        ifc_object = self.ifc_file.by_guid(object_id)
+        for e in self.unselected.children():
+            if e.objectName() == object_id:
+                e.setParent(self.selections)
+                # Switch the Material from our Mesh Child
+                for c in e.children():
+                    c.removeComponent(self.material)
+                    c.addComponent(self.phong)
+                self.update_scene_graph_tree()
+                self.scene_graph.expandToDepth(1)
+                return
+
+    def deselect_object_by_id(self, object_id):
+        print("View3D.deselect_object_by_id ", object_id)
+        ifc_object = self.ifc_file.by_guid(object_id)
+        for e in self.selections.children():
+            if e.objectName() == object_id:
+                e.setParent(self.unselected)
+                # Switch the Material from our Mesh Child
+                for c in e.children():
+                    c.removeComponent(self.phong)
+                    c.addComponent(self.material)
+                self.update_scene_graph_tree()
+                self.scene_graph.expandToDepth(1)
+                return
+
+    def toggle_entity(self, entity):
+        print("View3D.toggle_entity ", entity.objectName())
+        was_selected = False
+        for e in self.selections.children():
+            if e == entity:
+                was_selected = True
+                e.setParent(self.unselected)
+                # e.setEnabled(True)
+                # Switch the Material from our Mesh Child
+                for c in e.children():
+                    c.removeComponent(self.phong)
+                    c.addComponent(self.material)
+        # set selection
+        if not was_selected:
+            entity.setParent(self.selections)
+            # entity.setEnabled(False)
+            for c in entity.children():
+                c.removeComponent(self.material)
+                c.addComponent(self.phong)
+
+        self.update_scene_graph_tree()
+        self.scene_graph.expandToDepth(1)
+
+    def select_exclusive_entity(self, entity):
+        print("View3D.select_exclusive_entity ", entity)
+        for e in self.selections.children():
+            if e is not entity:
+                e.setParent(self.unselected)
+                for c in e.children():
+                    c.removeComponent(self.phong)
+                    c.addComponent(self.material)
+                self.remove_from_selected_entities.emit(e.objectName())
+
+        entity.setParent(self.selections)
+        # e.setEnabled(True)
+        for c in entity.children():
+            c.removeComponent(self.material)
+            c.addComponent(self.phong)
+        self.add_to_selected_entities.emit(entity.objectName())
+
+        self.update_scene_graph_tree()
+        self.scene_graph.expandToDepth(1)
+
+    def pick(self, e: QPickTriangleEvent):
+        # intersection = e.localIntersection()
+        entity = e.entity()
+        if entity is None:
+            return
+        # Picked mesh is child of container entity "parent"
+        parent = entity.parentEntity()
+        ifc_object = self.ifc_file.by_guid(parent.objectName())
+        if hasattr(ifc_object, "Name") and ifc_object.Name is not None:
+            print("Picked object '" + ifc_object.Name + "' (" + ifc_object.GlobalId + ") - #" + str(ifc_object.id()))
+        else:
+            print("Picked object (" + ifc_object.GlobalId + ") - #" + str(ifc_object.id()))
+
+        if e.button() == Qt.LeftButton and e.modifiers() == Qt.ControlModifier:
+            self.toggle_entity(parent)
+        else:
+            self.select_exclusive_entity(parent)
+
+    def toggle_meshes(self):
+        # Parse the whole Scenegraph and hide all branches with a Triangle Renderer
+        print("Not implemented")
+
+    def toggle_wireframe(self):
+        # Parse the whole Scenegraph and hide all branches with a Lines Renderer
+        print("Not implemented")
 
     def initialise_camera(self):
         # camera
         camera = self.view.camera()
+        camera.setObjectName("Camera")
         camera.lens().setPerspectiveProjection(45.0, 16.0 / 9.0, 0.1, 1000)
         camera.setPosition(QVector3D(0, 0, 40))
         camera.setViewCenter(QVector3D(0, 0, 0))
 
         # for camera control
-        cam_controller = QOrbitCameraController(self.root)
+        cam_controller = QOrbitCameraController(self.scene)
+        cam_controller.setObjectName("Orbit Camera Controller")
         cam_controller.setLinearSpeed(50.0)
         cam_controller.setLookSpeed(180.0)
         cam_controller.setCamera(camera)
+
+    def create_light(self):
+        # Light
+        self.lights = QEntity(self.scene)
+        self.lights.setProperty("IsProduct", True)
+
+        # Light 1
+        light_entity = QEntity(self.lights)
+        light_entity.setObjectName("Light Entity 1")
+        light_entity.setProperty("IsProduct", True)
+        light = QPointLight(light_entity)
+        light.setObjectName("Point Light")
+        light.setColor(QColor.fromRgbF(1.0, 1.0, 1.0, 1.0))
+        light.setIntensity(1)
+        light_entity.addComponent(light)
+        light_transform = QTransform(light_entity)
+        light_transform.setObjectName("Light Transform")
+        light_transform.setTranslation(QVector3D(10.0, 40.0, 0.0))
+        light_entity.addComponent(light_transform)
+
+        # Light 2
+        light_entity2 = QEntity(self.lights)
+        light_entity2.setObjectName("Light Entity 2")
+        light_entity2.setProperty("IsProduct", True)
+        light2 = QPointLight(light_entity2)
+        light2.setObjectName("Point Light")
+        light2.setColor(QColor.fromRgbF(0.8, 0.8, 1.0, 1.0))
+        light2.setIntensity(1)
+        light_entity2.addComponent(light2)
+        light_transform2 = QTransform(light_entity2)
+        light_transform2.setObjectName("Light Transform")
+        light_transform2.setTranslation(QVector3D(10.0, -40.0, 0.0))
+        light_entity2.addComponent(light_transform2)
 
     def load_file(self, filename):
         if self.ifc_file is None:
@@ -110,8 +327,22 @@ class IFCQt3dView(QWidget):
         print("Importing IFC geometrical information ...")
         self.start = time.time()
         settings = ifcopenshell.geom.settings()
-        settings.set(settings.WELD_VERTICES, False)  # false is needed to generate normals -- slower!
+        settings.set(settings.WELD_VERTICES, False)  # false is needed to generate normals -- slower
+        # settings.set(settings.NO_NORMALS, True)  # disable generation of normals
         settings.set(settings.USE_WORLD_COORDS, True)  # true = ignore transformation
+        # settings.set(settings.SEW_SHELLS, True)  # true default - slightly slower?
+        # settings.set(settings.GENERATE_UVS, True)  # true default
+        settings.set(settings.FASTER_BOOLEANS, True)  # merge opening Booleans before subtracting
+        # settings.set(settings.DISABLE_TRIANGULATION, True)  # if using OCC formats
+        # settings.set(settings.USE_BREP_DATA, True)  # use OCC BREP data
+        # settings.set(settings.EXCLUDE_SOLIDS_AND_SURFACES, True)
+        # settings.set(settings.DISABLE_BOOLEAN_RESULT, True) # works
+        # settings.set(settings.DISABLE_OPENING_SUBTRACTIONS, True) # works
+        # settings.set(settings.STRICT_TOLERANCE, False)  # default kernel tolerance to 1 = True
+        # settings.set(settings.APPLY_LAYERSETS, True)  # geometry for individual layers
+        settings.set(settings.APPLY_DEFAULT_MATERIALS, True)  # assign default material for elements without
+        # settings.set_angular_tolerance(1)
+        # settings.set_deflection_tolerance(1)  # default = 1e-3
 
         settings.set(settings.USE_PYTHON_OPENCASCADE, True)
 
@@ -119,6 +350,56 @@ class IFCQt3dView(QWidget):
         # self.parse_project(settings)  # SLOWER - create geometry for each product
         self.parse_geometry(settings)  # FASTER - iteration with parallel processing
         print("\nFinished in ", time.time() - self.start)
+
+        self.update_scene_graph_tree()
+        # self.scene_graph.expandToDepth(1)
+
+    def toggle_visibility(self, tree_item, column):
+        # get the widget item
+        if tree_item is not None and column == 0:
+            # get its user data
+            entity = tree_item.data(0, Qt.UserRole)
+            if entity is not None:
+                if entity.property("IsProduct") is True:
+                    # TODO: this is the opposite of what we expect...
+                    entity.setEnabled(not entity.isEnabled())
+
+                    # set visibility to reflect the check state
+                    if tree_item.checkState(0) == Qt.Checked:
+                        # if not entity.isEnabled():
+                        #    entity.setEnabled(True)
+                        var = 1
+                    if tree_item.checkState(0) == Qt.Unchecked:
+                        var = 2
+                        # if entity.isEnabled():
+                        #    entity.setEnabled(False)
+
+    def update_scene_graph_tree(self, node=None, parent=None):
+        if node is None:
+            node = self.root
+        if parent is None:
+            parent = self.scene_graph.invisibleRootItem()
+            self.scene_graph.clear()
+
+        node_item = QTreeWidgetItem([node.objectName(), node.metaObject().className()])
+        parent.addChild(node_item)
+
+        # Add a reference to the QEntity
+        if node.property("IsProduct") is True:
+            node_item.setData(0, Qt.UserRole, node)
+            node_item.setData(0, Qt.ToolTipRole, str("{} - {}").format(node.objectName(), "IsProduct"))
+
+            # display checkbox for Enabled Items
+            node_item.setFlags(node_item.flags() | Qt.ItemIsUserCheckable)
+            # TODO: this is the opposite of what we expect...
+            if node.isEnabled():
+                node_item.setCheckState(0, Qt.Unchecked)
+            else:
+                node_item.setCheckState(0, Qt.Checked)
+
+        # iterate over children
+        for item in node.children():
+            self.update_scene_graph_tree(item, node_item)
 
     def parse_geometry(self, settings):
         iterator = ifcopenshell.geom.iterator(settings, self.ifc_file, multiprocessing.cpu_count())
@@ -209,7 +490,12 @@ class IFCQt3dView(QWidget):
         styles = shape.styles
         style_ids = shape.style_ids
 
-        custom_mesh_entity = QEntity(self.root)
+        custom_mesh_entity = QEntity(self.unselected)
+        ifc_object = self.ifc_file.by_id(int(shape.data.product.id()))
+        custom_mesh_entity.setObjectName(ifc_object.GlobalId)
+        custom_mesh_entity.setProperty("IsProduct", True)
+        custom_mesh_entity.setProperty("GlobalId", ifc_object.GlobalId)
+
         it = OCC.Core.TopoDS.TopoDS_Iterator(geometry)
         index = 0
         while it.More():
@@ -217,8 +503,10 @@ class IFCQt3dView(QWidget):
 
             # ------ MESH --------------------------
             custom_mesh_renderer = QGeometryRenderer()
+            custom_mesh_renderer.setObjectName("Mesh Renderer")
             custom_mesh_renderer.setPrimitiveType(QGeometryRenderer.Triangles)
             custom_geometry = QGeometry(custom_mesh_renderer)
+            custom_geometry.setObjectName("Custom Geometry")
 
             # Position Attribute
             position_data_buffer = QBuffer(QBuffer.VertexBuffer, custom_geometry)
@@ -233,6 +521,7 @@ class IFCQt3dView(QWidget):
             position_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
             position_attribute.setCount(len(vertices))  # vertices
             position_attribute.setName(QAttribute.defaultPositionAttributeName())
+            position_attribute.setObjectName("Position Vertex Attribute")
             custom_geometry.addAttribute(position_attribute)
 
             # Normal Attribute
@@ -249,6 +538,7 @@ class IFCQt3dView(QWidget):
                 normal_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
                 normal_attribute.setCount(len(normals))  # vertices
                 normal_attribute.setName(QAttribute.defaultNormalAttributeName())
+                normal_attribute.setObjectName("Normal Vertex Attribute")
                 custom_geometry.addAttribute(normal_attribute)
 
             # Collect the colors via the materials (1 color per vertex)
@@ -258,6 +548,7 @@ class IFCQt3dView(QWidget):
             r = s_style[0]
             g = s_style[1]
             b = s_style[2]
+            a = s_style[3]
             color_list = [r, g, b] * int(len(vertices) / 3)
 
             # Color Attribute
@@ -273,17 +564,21 @@ class IFCQt3dView(QWidget):
             color_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
             color_attribute.setCount(len(color_list))  # colors (per vertex)
             color_attribute.setName(QAttribute.defaultColorAttributeName())
+            color_attribute.setObjectName("Color Vertex Attribute")
             custom_geometry.addAttribute(color_attribute)
 
             # Faces Index Attribute
             index_data_buffer = QBuffer(QBuffer.IndexBuffer, custom_geometry)
             # index_data_buffer.setData(QByteArray(np.array(triangles).astype(np.uintc).tobytes()))
             index_data_buffer.setData(struct.pack("{}I".format(len(triangles)), *triangles))
+            index_data_buffer.setObjectName("Index Data Buffer")
             index_attribute = QAttribute()
             index_attribute.setVertexBaseType(QAttribute.UnsignedInt)
             index_attribute.setAttributeType(QAttribute.IndexAttribute)
             index_attribute.setBuffer(index_data_buffer)
             index_attribute.setCount(len(triangles))
+            index_attribute.setName("Indices")
+            index_attribute.setObjectName("Index Unsigned Int Attribute")
             custom_geometry.addAttribute(index_attribute)
 
             # make the geometry visible with a renderer
@@ -295,15 +590,22 @@ class IFCQt3dView(QWidget):
             # add everything to the scene
             custom_mesh_sub_entity = QEntity(custom_mesh_entity)
             custom_mesh_sub_entity.addComponent(custom_mesh_renderer)
+            custom_mesh_sub_entity.setObjectName("Mesh")  # ifc_object.GlobalId)
             transform = QTransform()
+            transform.setObjectName("Rotate X -90°")
             transform.setRotationX(-90)
             custom_mesh_sub_entity.addComponent(transform)
-            custom_mesh_sub_entity.addComponent(self.material)
+            if a < 1.0:
+                custom_mesh_sub_entity.addComponent(self.transparent)
+            else:
+                custom_mesh_sub_entity.addComponent(self.material)
 
             # ------ EDGES --------------------------
             custom_line_renderer = QGeometryRenderer()
+            custom_line_renderer.setObjectName("Lines Renderer")
             custom_line_renderer.setPrimitiveType(QGeometryRenderer.Lines)
             custom_line_geometry = QGeometry(custom_line_renderer)
+            custom_line_geometry.setObjectName("Custom Lines Geometry")
 
             # Position Attribute
             position_data_buffer = QBuffer(QBuffer.VertexBuffer, custom_line_geometry)
@@ -325,12 +627,14 @@ class IFCQt3dView(QWidget):
             index_data_buffer = QBuffer(QBuffer.IndexBuffer, custom_line_geometry)
             # index_data_buffer.setData(QByteArray(np.array(indices_edges).astype(np.uintc).tobytes()))
             index_data_buffer.setData(struct.pack("{}I".format(len(indices_edges)), *indices_edges))
+            index_data_buffer.setObjectName("Index Data Buffer")
             index_attribute = QAttribute()
             index_attribute.setVertexBaseType(QAttribute.UnsignedInt)
             index_attribute.setAttributeType(QAttribute.IndexAttribute)
             index_attribute.setBuffer(index_data_buffer)
             index_attribute.setCount(len(indices_edges))
             index_attribute.setName("Indices")
+            index_attribute.setObjectName("Index Unsigned Int Attribute")
             custom_line_geometry.addAttribute(index_attribute)
 
             # make the geometry visible with a renderer
@@ -340,8 +644,10 @@ class IFCQt3dView(QWidget):
             custom_line_renderer.setFirstInstance(0)
 
             # add everything to the scene
-            custom_line_entity = QEntity(self.root)
+            custom_line_entity = QEntity(self.wireframe)
+            custom_line_entity.setObjectName("Line")
             transform = QTransform()
+            transform.setObjectName("Rotate X -90°")
             transform.setRotationX(-90)
             custom_line_entity.addComponent(transform)
             custom_line_entity.addComponent(custom_line_renderer)
@@ -350,6 +656,94 @@ class IFCQt3dView(QWidget):
             index += 1
             it.Next()
 
+    def generate_line(self, start, end):
+        vertices = start + end
+        self.generate_primitive(vertices)
+
+    def generate_axis(self, size, pos=None):
+        if pos is None:
+            pos = [0, 0, 0]
+        x, y, z = pos[0], pos[1], pos[2]
+        x_axis = [x, y, z, x + size, y, z]
+        y_axis = [x, y, z, x, y + size, z]
+        z_axis = [x, y, z, x, y, z + size]
+        self.generate_primitive(x_axis, [1, 0, 0])
+        self.generate_primitive(y_axis, [0, 1, 0])
+        self.generate_primitive(z_axis, [0, 0, 1])
+
+    def generate_grid(self, extent, pos=None, step_size=1):
+        if pos is None:
+            pos = [0, 0, 0]
+        x, y, z = pos[0], pos[1], pos[2]
+        for h in range(-extent, extent + step_size, step_size):
+            grid_line = [x + h, y - extent, z, x + h, y + extent, z]
+            self.generate_primitive(grid_line)
+        for v in range(-extent, extent + step_size, step_size):
+            grid_line = [x - extent, y + v, z, x + extent, y + v, z]
+            self.generate_primitive(grid_line)
+
+    def generate_primitive(self,
+                           coordinates,
+                           colors=None,
+                           primitive=QGeometryRenderer.Lines):
+        # coordinates = [x1, y1, z1, x2, y2, z2, ...]
+        if colors is None:
+            colors = [0.5, 0.5, 0.5]
+        if len(colors) != len(coordinates):
+            color_list = colors * int(len(coordinates) / len(colors))
+        else:
+            color_list = colors
+
+        custom_line_renderer = QGeometryRenderer()
+        custom_line_renderer.setPrimitiveType(primitive)
+        custom_geometry = QGeometry(custom_line_renderer)
+
+        # Position Attribute
+        position_data_buffer = QBuffer(QBuffer.VertexBuffer, custom_geometry)
+        # position_data_buffer.setData(QByteArray(np.array(coordinates).astype(np.float32).tobytes()))
+        position_data_buffer.setData(struct.pack('%sf' % len(coordinates), *coordinates))
+        position_attribute = QAttribute()
+        # position_attribute.setAttributeType(QAttribute.VertexAttribute)
+        position_attribute.setBuffer(position_data_buffer)
+        # position_attribute.setVertexBaseType(QAttribute.Float)
+        position_attribute.setVertexSize(3)  # 3 floats
+        # position_attribute.setByteOffset(0)  # start from first index
+        # position_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
+        # position_attribute.setCount(len(coordinates))  # vertices
+        position_attribute.setName(QAttribute.defaultPositionAttributeName())
+        custom_geometry.addAttribute(position_attribute)
+
+        # Color Attribute
+        color_data_buffer = QBuffer(QBuffer.VertexBuffer, custom_geometry)
+        # color_data_buffer.setData(QByteArray(np.array(color_list).astype(np.float32).tobytes()))
+        color_data_buffer.setData(struct.pack('%sf' % len(color_list), *color_list))
+        color_attribute = QAttribute()
+        # color_attribute.setAttributeType(QAttribute.VertexAttribute)
+        color_attribute.setBuffer(color_data_buffer)
+        # color_attribute.setVertexBaseType(QAttribute.Float)
+        color_attribute.setVertexSize(3)  # 3 floats
+        # color_attribute.setByteOffset(0)  # start from first index
+        # color_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
+        color_attribute.setCount(len(color_list))  # colors (per vertex)
+        color_attribute.setName(QAttribute.defaultColorAttributeName())
+        custom_geometry.addAttribute(color_attribute)
+
+        # ----------------------------------------------------------------------------
+        # make the geometry visible with a renderer
+        custom_line_renderer.setGeometry(custom_geometry)
+        custom_line_renderer.setInstanceCount(1)
+        custom_line_renderer.setFirstVertex(0)
+        custom_line_renderer.setFirstInstance(0)
+
+        # add everything to the scene
+        custom_line_entity = QEntity(self.grids)
+        custom_line_entity.setObjectName("Line")
+        transform = QTransform()
+        transform.setObjectName("Rotate X -90°")
+        transform.setRotationX(-90)
+        custom_line_entity.addComponent(transform)
+        custom_line_entity.addComponent(custom_line_renderer)
+        custom_line_entity.addComponent(self.material)
 
 
 # Our Main function

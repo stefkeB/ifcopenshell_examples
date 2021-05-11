@@ -16,6 +16,11 @@ class QIFCViewer(QMainWindow):
         # Tree Widget
         self.view_tree = IFCTreeWidget()
 
+        # Selection Syncing
+        self.view_tree.select_object.connect(self.view_3d.select_object_by_id)
+        self.view_tree.deselect_object.connect(self.view_3d.deselect_object_by_id)
+        self.view_3d.add_to_selected_entities.connect(self.view_tree.receive_selection)
+
         # Docking Widgets
         self.dock = QDockWidget('Model Tree', self)
         self.dock.setWidget(self.view_tree)
