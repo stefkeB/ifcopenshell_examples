@@ -4,13 +4,20 @@ import os.path
 import struct
 import multiprocessing
 
-from PyQt5 import QtCore
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.Qt3DCore import *
-from PyQt5.QtWidgets import *
-from PyQt5.Qt3DExtras import *
-from PyQt5.Qt3DRender import *
+try:
+    from PyQt5.QtCore import *
+    from PyQt5.QtGui import *
+    from PyQt5.QtWidgets import *
+    from PyQt5.Qt3DCore import *
+    from PyQt5.Qt3DExtras import *
+    from PyQt5.Qt3DRender import *
+except Exception:
+    from PySide2.QtGui import *
+    from PySide2.QtCore import *
+    from PySide2.QtWidgets import *
+    from PySide2.Qt3DCore import *
+    from PySide2.Qt3DExtras import *
+    from PySide2.Qt3DRender import *
 
 import ifcopenshell
 import ifcopenshell.geom
@@ -32,7 +39,7 @@ class View3D(QWidget):
         self.view = Qt3DWindow()
         self.view.defaultFrameGraph().setClearColor(QColor("#4466ff"))
         self.container = self.createWindowContainer(self.view)
-        self.container.setMinimumSize(QtCore.QSize(200, 100))
+        self.container.setMinimumSize(QSize(200, 100))
         self.container.setFocusPolicy(Qt.NoFocus)
 
         # Prepare our scene

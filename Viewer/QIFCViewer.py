@@ -1,4 +1,4 @@
-from IFCQt3dView import *
+from IFCQt3DView import *
 from IFCTreeWidget import *
 
 
