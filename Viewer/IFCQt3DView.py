@@ -54,6 +54,7 @@ class IFCQt3dView(QWidget):
     """
     3D View Widget
     - V1 = IFC File Loading, geometry parsing & basic navigation
+    - V2 = with Edges
     """
     def __init__(self):
         QWidget.__init__(self)
@@ -74,6 +75,10 @@ class IFCQt3dView(QWidget):
         self.material = QPerVertexColorMaterial()
         self.root.addComponent(self.material)
         self.material.setShareable(True)
+        self.edge_material = QDiffuseSpecularMaterial()
+        self.root.addComponent(self.edge_material)
+        self.edge_material.setShareable(True)
+        self.edge_material.setDiffuse(QColor(50, 50, 50))
         self.initialise_camera()
         self.view.setRootEntity(self.root)
 
@@ -151,7 +156,8 @@ class IFCQt3dView(QWidget):
     def parse_shape(self, geometry):
         # compute the tessellation
         tess = ShapeTesselator(geometry)
-        tess.Compute()
+        tess.Compute(compute_edges=True)
+        # tess.Compute(compute_edges=False, mesh_quality=1.0, parallel=True)
 
         # get the vertices
         vertices = []
@@ -180,7 +186,22 @@ class IFCQt3dView(QWidget):
             triangles.append(i2)
             triangles.append(i3)
 
-        return vertices, normals, triangles
+        # get the edges
+        edges = []
+        edge_count = tess.ObjGetEdgeCount()
+        for i_edge in range(0, edge_count):
+            vertex_count = tess.ObjEdgeGetVertexCount(i_edge)
+            # edge = []
+            for i_vertex in range(0, vertex_count):
+                vertex = tess.GetEdgeVertex(i_edge, i_vertex)
+                # edge.append(vertex)
+                # edges.append(i_vertex)
+                edges.append(vertex[0])
+                edges.append(vertex[1])
+                edges.append(vertex[2])
+            # edges.append(edge)
+
+        return vertices, normals, triangles, edges
 
     def generate_rendermesh(self, shape):
         data = shape.data
@@ -192,7 +213,7 @@ class IFCQt3dView(QWidget):
         it = OCC.Core.TopoDS.TopoDS_Iterator(geometry)
         index = 0
         while it.More():
-            vertices, normals, triangles = self.parse_shape(it.Value())
+            vertices, normals, triangles, edges = self.parse_shape(it.Value())
 
             # ------ MESH --------------------------
             custom_mesh_renderer = QGeometryRenderer()
@@ -279,8 +300,56 @@ class IFCQt3dView(QWidget):
             custom_mesh_sub_entity.addComponent(transform)
             custom_mesh_sub_entity.addComponent(self.material)
 
+            # ------ EDGES --------------------------
+            custom_line_renderer = QGeometryRenderer()
+            custom_line_renderer.setPrimitiveType(QGeometryRenderer.Lines)
+            custom_line_geometry = QGeometry(custom_line_renderer)
+
+            # Position Attribute
+            position_data_buffer = QBuffer(QBuffer.VertexBuffer, custom_line_geometry)
+            # position_data_buffer.setData(QByteArray(np.array(edges).astype(np.float32).tobytes()))
+            position_data_buffer.setData(struct.pack('%sf' % len(edges), *edges))
+            position_attribute = QAttribute()
+            position_attribute.setAttributeType(QAttribute.VertexAttribute)
+            position_attribute.setBuffer(position_data_buffer)
+            position_attribute.setVertexBaseType(QAttribute.Float)
+            position_attribute.setVertexSize(3)  # 3 floats
+            position_attribute.setByteOffset(0)  # start from first index
+            position_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
+            position_attribute.setCount(len(edges))  # vertices
+            position_attribute.setName(QAttribute.defaultPositionAttributeName())
+            custom_line_geometry.addAttribute(position_attribute)
+
+            # Edges Index Attribute
+            indices_edges = list(range(int(len(edges) / 3)))
+            index_data_buffer = QBuffer(QBuffer.IndexBuffer, custom_line_geometry)
+            # index_data_buffer.setData(QByteArray(np.array(indices_edges).astype(np.uintc).tobytes()))
+            index_data_buffer.setData(struct.pack("{}I".format(len(indices_edges)), *indices_edges))
+            index_attribute = QAttribute()
+            index_attribute.setVertexBaseType(QAttribute.UnsignedInt)
+            index_attribute.setAttributeType(QAttribute.IndexAttribute)
+            index_attribute.setBuffer(index_data_buffer)
+            index_attribute.setCount(len(indices_edges))
+            index_attribute.setName("Indices")
+            custom_line_geometry.addAttribute(index_attribute)
+
+            # make the geometry visible with a renderer
+            custom_line_renderer.setGeometry(custom_line_geometry)
+            custom_line_renderer.setInstanceCount(1)
+            custom_line_renderer.setFirstVertex(0)
+            custom_line_renderer.setFirstInstance(0)
+
+            # add everything to the scene
+            custom_line_entity = QEntity(self.root)
+            transform = QTransform()
+            transform.setRotationX(-90)
+            custom_line_entity.addComponent(transform)
+            custom_line_entity.addComponent(custom_line_renderer)
+            custom_line_entity.addComponent(self.edge_material)
+
             index += 1
             it.Next()
+
 
 
 # Our Main function
