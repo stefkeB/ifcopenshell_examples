@@ -1,20 +1,20 @@
-from Qt3D_minimal import *
-from ifc_treeviewer2 import *
+from IFCQt3dView import *
+from IFCTreeWidget import *
 
 
 class QIFCViewer(QMainWindow):
     """
     IFC Model Viewer
-    - V1 = Loading the ViewTree and View3D together (as-is)
+    - V1 = Loading the IFCTreeWidget and IFCQt3dView together (as-is)
     """
     def __init__(self):
         QMainWindow.__init__(self)
 
         self.ifc_file = None
         # 3D Widget
-        self.view_3d = View3D()
+        self.view_3d = IFCQt3dView()
         # Tree Widget
-        self.view_tree = ViewTree()
+        self.view_tree = IFCTreeWidget()
 
         # Docking Widgets
         self.dock = QDockWidget('Model Tree', self)
