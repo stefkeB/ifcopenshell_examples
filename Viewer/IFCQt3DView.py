@@ -144,8 +144,7 @@ class IFCQt3dView(QWidget):
         # self.scene_graph.itemPressed.connect(self.toggle_visibility)
 
         # picking
-        render_settings = self.view.renderSettings()
-        picking_settings = render_settings.pickingSettings()
+        picking_settings = self.view.renderSettings().pickingSettings()
         self.picker = QObjectPicker(self.scene)
         self.picker.setObjectName("Picker")
         self.picker.setProperty("IsProduct", True)
@@ -173,7 +172,7 @@ class IFCQt3dView(QWidget):
         self.setLayout(layout)
 
     def select_object_by_id(self, object_id):
-        print("View3D.select_object_by_id ", object_id)
+        print("IFCQt3dView.select_object_by_id ", object_id)
         ifc_object = self.ifc_file.by_guid(object_id)
         for e in self.unselected.children():
             if e.objectName() == object_id:
@@ -187,7 +186,7 @@ class IFCQt3dView(QWidget):
                 return
 
     def deselect_object_by_id(self, object_id):
-        print("View3D.deselect_object_by_id ", object_id)
+        print("IFCQt3dView.deselect_object_by_id ", object_id)
         ifc_object = self.ifc_file.by_guid(object_id)
         for e in self.selections.children():
             if e.objectName() == object_id:
@@ -201,7 +200,7 @@ class IFCQt3dView(QWidget):
                 return
 
     def toggle_entity(self, entity):
-        print("View3D.toggle_entity ", entity.objectName())
+        print("IFCQt3dView.toggle_entity ", entity.objectName())
         was_selected = False
         for e in self.selections.children():
             if e == entity:
@@ -224,7 +223,7 @@ class IFCQt3dView(QWidget):
         self.scene_graph.expandToDepth(1)
 
     def select_exclusive_entity(self, entity):
-        print("View3D.select_exclusive_entity ", entity)
+        print("IFCQt3dView.select_exclusive_entity ", entity)
         for e in self.selections.children():
             if e is not entity:
                 e.setParent(self.unselected)
@@ -252,9 +251,9 @@ class IFCQt3dView(QWidget):
         parent = entity.parentEntity()
         ifc_object = self.ifc_file.by_guid(parent.objectName())
         if hasattr(ifc_object, "Name") and ifc_object.Name is not None:
-            print("Picked object '" + ifc_object.Name + "' (" + ifc_object.GlobalId + ") - #" + str(ifc_object.id()))
+            print("IFCQt3dView.pick '" + ifc_object.Name + "' (" + ifc_object.GlobalId + ") - #" + str(ifc_object.id()))
         else:
-            print("Picked object (" + ifc_object.GlobalId + ") - #" + str(ifc_object.id()))
+            print("IFCQt3dView.pick (" + ifc_object.GlobalId + ") - #" + str(ifc_object.id()))
 
         if e.button() == Qt.LeftButton and e.modifiers() == Qt.ControlModifier:
             self.toggle_entity(parent)
