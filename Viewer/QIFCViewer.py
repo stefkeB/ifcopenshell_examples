@@ -13,27 +13,42 @@ class QIFCViewer(QMainWindow):
 
         # A dictionary referring to our files, based on name
         self.ifc_files = {}
-        self.ifc_file = None
-        self.ifc_filename = None
 
         # menu, actions and toolbar
         toolbar = QToolBar("My main toolbar")
         self.addToolBar(toolbar)
+        menu_bar = self.menuBar()
+        file_menu = QMenu("&File", self)
+        menu_bar.addMenu(file_menu)
 
         action_open = QAction("Open...", self)
         action_open.setShortcut("CTRL+O")
         action_open.setStatusTip("Open an IFC Model")
         action_open.triggered.connect(self.get_file)
         toolbar.addAction(action_open)
+        file_menu.addAction(action_open)
 
-        action_save = QAction("Save", self)
+        action_save = QAction("Save All", self)
         action_save.setShortcut("CTRL+S")
-        action_save.setStatusTip("Save the IFC Model")
-        action_save.triggered.connect(self.save)
+        action_save.setStatusTip("Saves all IFC Models")
+        action_save.triggered.connect(self.save_files)
         toolbar.addAction(action_save)
+        file_menu.addAction(action_save)
+
+        action_close = QAction("Close All", self)
+        action_close.setShortcut("CTRL+W")
+        action_close.setStatusTip("Close all IFC Models")
+        action_close.triggered.connect(self.close_files)
+        toolbar.addAction(action_close)
+        file_menu.addAction(action_close)
+
+        action_quit = QAction("Quit", self)
+        action_quit.setShortcut("CTRL+Q")
+        action_quit.setStatusTip("Quit the application")
+        action_quit.triggered.connect(qApp.quit)
+        file_menu.addAction(action_quit)
 
         self.setStatusBar(QStatusBar(self))
-
 
         # 3D Widget
         self.view_3d = IFCQt3dView()
@@ -55,37 +70,72 @@ class QIFCViewer(QMainWindow):
         self.setCentralWidget(self.view_3d)
 
     def load_file(self, filename):
-        # if self.ifc_file is None:
-        print("Importing ", filename)
+        """
+        Load an IFC file from the given path. If the file was already loaded,
+        the user is asked if the file should be replaced.
+
+        :param filename: full path to the IFC file
+        :return: True if the file was loaded, False if cancelled.
+        """
+        if filename in self.ifc_files:
+            # Display warning that this model was already loaded. Replace or Cancel.
+            dlg = QMessageBox(self.parent())
+            dlg.setWindowTitle("Model already loaded!")
+            dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            dlg.setText("Do you want to replace the currently loaded model?")
+            button = dlg.exec_()
+            if button == QMessageBox.Cancel:
+                return False
+
         start = time.time()
-        self.ifc_file = ifcopenshell.open(filename)
+        ifc_file = ifcopenshell.open(filename)
         print("Loaded ", filename, " in ", time.time() - start, " seconds")
-        self.ifc_filename = filename
-        self.ifc_files[filename] = self.ifc_file
+        self.ifc_files[filename] = ifc_file
 
         # print("Loading Views ...")
         start = time.time()
-        self.view_3d.ifc_file = self.ifc_file
-        self.view_3d.load_file(filename)
-        self.view_tree.ifc_file = self.ifc_file
+        self.view_tree.ifc_files[filename] = ifc_file
         self.view_tree.load_file(filename)
-        print("Loaded views in ", time.time() - start)
 
-    def save(self):
-        if self.ifc_file is None:
-            return
-        else:
-            self.ifc_file.write(self.ifc_filename)
+        self.view_3d.ifc_files[filename] = ifc_file
+        self.view_3d.load_file(filename)
+        print("Loaded all views in ", time.time() - start)
+        return True
+
+    def save_files(self):
+        """
+        Save all currently loaded files
+        """
+        for ifc_filename, ifc_file in self.ifc_files.items():
+            ifc_file.write(ifc_filename)
 
     def get_file(self):
+        """
+        Get a File Open dialog to select IFC files to load in the project
+        """
         filenames, filter_string = QFileDialog.getOpenFileNames(self, caption="Open IFC File",
                                                                 filter="IFC files (*.ifc)")
 
         # self.setWindowTitle("IFC Viewer")
         for file in filenames:
             if os.path.isfile(file):
-                self.load_file(file)
-                self.setWindowTitle(self.windowTitle() + " - " + os.path.basename(file))
+                if self.load_file(file):
+                    # Concatenate all file names
+                    title = "IFC Viewer"
+                    for filename, file in self.ifc_files.items():
+                        title += " - " + os.path.basename(filename)
+                    if len(title) > 64:
+                        title = title[:64] + "..."
+                    self.setWindowTitle(title)
+
+    def close_files(self):
+        """
+        Close all loaded files (and clear the different views)
+        """
+        self.ifc_files = {}
+        self.view_tree.close_files()
+        self.view_3d.close_files()
+        self.setWindowTitle("IFC Viewer")
 
 
 # Our Main function
@@ -95,7 +145,7 @@ def main():
         app = QApplication.instance()
     else:
         app = QApplication(sys.argv)
-
+    app.setApplicationDisplayName("IFC Viewer")
     w = QIFCViewer()
     w.setWindowTitle("IFC Viewer")
     w.resize(1280, 800)

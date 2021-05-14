@@ -15,19 +15,17 @@ import ifcopenshell
 
 class IFCTreeWidget(QWidget):
     """
-    Third version of the Basic Tree View
-    - V1 = Single Tree (object + basic hierachy)
+    Fifth version of the IFC Tree Widget/View
+    - V1 = Single Tree (object + basic hierarchy)
     - V2 = Double Tree (object with type, properties/quantities + attributes)
     - V3 = Support for Selection Signals (to be linked to 3D view)
     - V4 = Object Tree with references + Property tree with Header data
-    - V5 = Editing the name of objects + keeping files in a dictionary
+    - V5 = Editing the name of objects + keeping multiple files in a dictionary
     """
     def __init__(self):
         QWidget.__init__(self)
         # A dictionary referring to our files, based on name
         self.ifc_files = {}
-        self.ifc_file = None
-        self.ifc_filename = None
         # Prepare Tree Widgets in a stretchable layout
         vbox = QVBoxLayout()
         self.setLayout(vbox)
@@ -51,7 +49,6 @@ class IFCTreeWidget(QWidget):
     deselect_object = pyqtSignal(object)
 
     def send_selection(self, selected_items, deselected_items):
-        # print("treeview.send_selection ", selected_items)
         items = self.object_tree.selectedItems()
         for item in items:
             entity = item.data(0, Qt.UserRole)
@@ -59,7 +56,7 @@ class IFCTreeWidget(QWidget):
                 GlobalId = entity.GlobalId
                 if GlobalId != '':
                     self.select_object.emit(GlobalId)
-                    print("treeview.send_selection.select_object ", GlobalId)
+                    print("IFCTreeWidget.send_selection.select_object ", GlobalId)
 
         # send the deselected items as well
         for index in deselected_items.indexes():
@@ -73,7 +70,7 @@ class IFCTreeWidget(QWidget):
                         print("treeview.send_selection.deselect_object ", GlobalId)
 
     def receive_selection(self, ids):
-        print("treeview.receive_selection ", ids)
+        print("IFCTreeWidget.receive_selection ", ids)
         self.object_tree.clearSelection()
         if not len(ids):
             return
@@ -83,31 +80,52 @@ class IFCTreeWidget(QWidget):
             item = iterator.value()
             entity = item.data(0, Qt.UserRole)
             if entity is not None and hasattr(entity, "GlobalId"):
-                GlobalId = entity.GlobalId
-                if GlobalId == ids:
+                if entity.GlobalId == ids:
                     item.setSelected(not item.isSelected())
                     index = self.object_tree.indexFromItem(item)
                     self.object_tree.scrollTo(index)
             iterator += 1
 
+    def close_files(self):
+        self.ifc_files.clear()
+        self.property_tree.clear()
+        self.object_tree.clear()
+
     def load_file(self, filename):
-        # Import the IFC File
-        if self.ifc_file is None:
-            self.ifc_file = ifcopenshell.open(filename)
-        self.ifc_filename = filename
-        self.ifc_files[filename] = self.ifc_file
-        root_item = QTreeWidgetItem(
-            [self.ifc_file.wrapped_data.header.file_name.name, 'File'])
-        root_item.setData(0, Qt.UserRole, self.ifc_file)
-        for item in self.ifc_file.by_type('IfcProject'):
+        """
+        Load the file passed as filename and builds the whole object tree.
+        If it already exists, that branch is removed and recreated.
+
+        :param filename: Full path to the IFC file
+        """
+        ifc_file = None
+        if filename in self.ifc_files:
+            ifc_file = self.ifc_files[filename]
+            for i in range(self.object_tree.topLevelItemCount()):
+                toplevel_item = self.object_tree.topLevelItem(i)
+                if filename == toplevel_item.text(0):
+                    root = self.object_tree.invisibleRootItem()
+                    root.removeChild(toplevel_item)
+        else:  # Load as new file
+            ifc_file = ifcopenshell.open(filename)
+            self.ifc_files[filename] = ifc_file
+
+        root_item = QTreeWidgetItem([filename, 'File'])
+        root_item.setData(0, Qt.UserRole, ifc_file)
+        for item in ifc_file.by_type('IfcProject'):
             self.add_object_in_tree(item, root_item)
         # Finish the GUI
         self.object_tree.addTopLevelItem(root_item)
+        self.property_tree.clear()
         self.object_tree.expandToDepth(3)
 
-    # Attributes
     def add_attributes_in_tree(self, ifc_object, parent_item):
-        # the individual attributes
+        """
+        Fill the property tree with the attributes of an object
+
+        :param ifc_object: IfcPropertySet containing individual properties
+        :param parent_item: QTreeWidgetItem used to put attributes underneath
+        """
         for att_idx in range(0, len(ifc_object)):
             # https://github.com/jakob-beetz/IfcOpenShellScriptingTutorial/wiki/02:-Inspecting-IFC-instance-objects
             att_name = ifc_object.attribute_name(att_idx)
@@ -116,19 +134,38 @@ class IFCTreeWidget(QWidget):
             attribute_item = QTreeWidgetItem([att_name, att_value, att_type])
             parent_item.addChild(attribute_item)
 
-    # PropertySet
     def add_properties_in_tree(self, property_set, parent_item):
-        # the individual properties
+        """
+        Fill the property tree with the properties of a particular property set
+
+        :param property_set: IfcPropertySet containing individual properties
+        :param parent_item: QTreeWidgetItem used to put properties underneath
+        """
         for prop in property_set.HasProperties:
             unit = str(prop.Unit) if hasattr(prop, 'Unit') else ''
             prop_value = '<not handled>'
             if prop.is_a('IfcPropertySingleValue'):
                 prop_value = str(prop.NominalValue.wrappedValue)
-            parent_item.addChild(QTreeWidgetItem([prop.Name, prop_value, unit]))
+                parent_item.addChild(QTreeWidgetItem([prop.Name, prop_value, unit]))
+            elif prop.is_a('IfcComplexProperty'):
+                property_item = QTreeWidgetItem([prop.Name, '', unit])
+                parent_item.addChild(property_item)
+                for nested_prop in prop.HasProperties:
+                    nested_unit = str(nested_prop.Unit) if hasattr(nested_prop, 'Unit') else ''
+                    property_nested_item = QTreeWidgetItem(
+                        [nested_prop.Name, str(nested_prop.NominalValue.wrappedValue), nested_unit])
+                    property_item.addChild(property_nested_item)
+            else:
+                property_item = QTreeWidgetItem([prop.Name, '<not handled>', unit])
+                parent_item.addChild(property_item)
 
-    # QuantitySet
     def add_quantities_in_tree(self, quantity_set, parent_item):
-        # the individual quantities
+        """
+        Fill the property tree with the quantities
+
+        :param quantity_set: IfcQuantitySet containing individual quantities
+        :param parent_item: QTreeWidgetItem used to put quantities underneath
+        """
         for quantity in quantity_set.Quantities:
             unit = str(quantity.Unit) if hasattr(quantity, 'Unit') else ''
             quantity_value = '<not handled>'
@@ -142,12 +179,17 @@ class IFCTreeWidget(QWidget):
                 quantity_value = str(quantity.CountValue)
             parent_item.addChild(QTreeWidgetItem([quantity.Name, quantity_value, unit]))
 
-    # Header Data
     def add_header_in_tree(self, parent_item):
+        """
+        Fill the property tree with the Header data from the file(s)
+        which contains the current selected entities
+
+        :param parent_item: QTreeWidgetItem used to put the header data underneath
+        """
         items = self.object_tree.selectedItems()
         for item in items:
-            # ifc_file = self.get_ifc_file_from_treeitem(item)
-            header = self.ifc_file.wrapped_data.header
+            ifc_file = self.get_ifc_file_from_treeitem(item)
+            header = ifc_file.wrapped_data.header
             FILE_DESCRIPTION_item = QTreeWidgetItem(["FILE_DESCRIPTION", "", ""])
             parent_item.addChild(FILE_DESCRIPTION_item)
             for desc in header.file_description.description:
@@ -180,15 +222,17 @@ class IFCTreeWidget(QWidget):
                 FILE_SCHEMA_item.addChild(
                     QTreeWidgetItem(["schema_identifiers", str(schema_identifiers), ""]))
 
-    # Entity Data
     def add_data(self):
+        """
+        Fill the property tree with data from the current selected entities
+        """
         self.property_tree.clear()
         items = self.object_tree.selectedItems()
         for item in items:
             # our very first item is the File, so show the Header only
             # TODO: beware that this may be called twice, when two items have been selected
             if item.text(1) == "File":
-                header_item = QTreeWidgetItem(["Header", "", ""])
+                header_item = QTreeWidgetItem(["Header"])
                 self.property_tree.addTopLevelItem(header_item)
                 self.add_header_in_tree(header_item)
                 self.property_tree.expandAll()
@@ -230,11 +274,47 @@ class IFCTreeWidget(QWidget):
 
             self.property_tree.expandAll()
 
+    def entity_summary(self, entity):
+        """
+        Return a multi-line string containing a summary of information about
+        the IFC entity instance (STEP Id, Name, Class and GlobalId).
+        Can be used in a Tooltip.
+
+        :param entity: The IFC entity instance
+        """
+        myId = str(entity.id()) if hasattr(entity, "id") else "<no id>"
+        myName = entity.Name if hasattr(entity, "Name") else "<no name>"
+        myClass = entity.is_a() if hasattr(entity, "is_a") else "<no class>"
+        myGlobalId = entity.GlobalId if hasattr(entity, "GlobalId") else "<no GlobalId>"
+        return str("STEP id\t: #{}\nName\t: {}\nClass\t: {}\nGlobalId\t: {}").format(
+            myId, myName, myClass, myGlobalId)
+
+    def get_ifc_file_from_treeitem(self, tree_item):
+        """
+        Find the file to which the current item in the tree belongs.
+        We find the top level item and check its file reference.
+
+        :param tree_item: QTreeWidgetItem to start looking from
+        :return: The IFC File as a reference.
+        """
+        # Beware that we may have multiple files
+        # So start from the filename of the TopLevelItem
+        while tree_item.parent():
+            tree_item = tree_item.parent()
+        return tree_item.data(0, Qt.UserRole)
+
     def add_object_in_tree(self, ifc_object, parent_item):
+        """
+        Fill the Object Tree recursively with Objects and their
+        children, as defined by the relationships
+
+        :param ifc_object: an IFC entity instance
+        :param parent_item: the parent QTreeWidgetItem
+        """
         tree_item = QTreeWidgetItem([ifc_object.Name, ifc_object.is_a()])  # , ifc_object.GlobalId])
         parent_item.addChild(tree_item)
         tree_item.setData(0, Qt.UserRole, ifc_object)
-        tree_item.setToolTip(0, ifc_object.GlobalId)
+        tree_item.setToolTip(0, self.entity_summary(ifc_object))
         if hasattr(ifc_object, 'ContainsElements'):
             for rel in ifc_object.ContainsElements:
                 for element in rel.RelatedElements:
@@ -245,12 +325,13 @@ class IFCTreeWidget(QWidget):
                     self.add_object_in_tree(related_object, tree_item)
 
     def set_object_name_edit(self, item, column):
-        '''
+        """
         Send the change back to the item
-        :param item:
-        :param column:
+
+        :param item: QTreeWidgetItem
+        :param int column: Column index
         :return:
-        '''
+        """
         if item.text(1) == 'File':
             return
         ifc_object = item.data(0, Qt.UserRole)
@@ -260,12 +341,13 @@ class IFCTreeWidget(QWidget):
         self.add_data()  # refresh the tree
 
     def check_object_name_edit(self, item, column):
-        '''
+        """
         Check whether this item can be edited
-        :param item:
-        :param column:
+
+        :param item: QTreeWidgetItem
+        :param column: Column index
         :return:
-        '''
+        """
         if item.text(1) == 'File':
             return
 

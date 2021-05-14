@@ -57,6 +57,7 @@ class IFCQt3dView(QWidget):
     - V2 = Adding Edges display
     - V3 = Draw Origin Axes & Grid
     - V4 = Object Picking & Selection Syncing (+ reorganise scenegraph)
+    - V5 = Working with multiple files (+ reorganise scenegraph again)
     """
 
     # Two signals to extend or shrink the selection
@@ -67,7 +68,8 @@ class IFCQt3dView(QWidget):
         QWidget.__init__(self)
 
         # variables
-        self.ifc_file = None
+        self.ifc_files = {}  # from filename to IFC model
+        self.model_nodes = {}  # from filename to QEntity node
         self.start = time.time()
 
         # 3D View
@@ -88,32 +90,30 @@ class IFCQt3dView(QWidget):
         self.grids.setParent(self.scene)
         self.grids.setProperty("IsProduct", True)
 
-        self.selections = QEntity()
-        self.selections.setObjectName("Selected")
-        self.selections.setProperty("IsProduct", True)
-        self.selections.setParent(self.root)
-        self.phong = QGoochMaterial()  # QDiffuseSpecularMaterial()
-        self.phong.setObjectName("Shared Diffuse Specular Material")
-        self.phong.setShareable(True)
-        self.phong.setDiffuse(QColor(50, 250, 50))
-        self.phong.setShininess(0.5)
-        self.scene.addComponent(self.phong)
+        self.files = QEntity()
+        self.files.setObjectName("Models")
+        self.files.setProperty("IsProduct", True)
+        self.files.setParent(self.root)
 
-        self.unselected = QEntity()
-        self.unselected.setObjectName("Unselected")
-        self.unselected.setProperty("IsProduct", True)
-        self.unselected.setParent(self.root)
+        # Selection List & Shared Materials
+        self.selected = []
+        self.mat_highlight = QGoochMaterial()
+        self.mat_highlight.setObjectName("Shared Highlight Material")
+        self.mat_highlight.setShareable(True)
+        self.mat_highlight.setDiffuse(QColor(50, 250, 50))
+        self.mat_highlight.setShininess(0.5)
+        self.scene.addComponent(self.mat_highlight)
+
         self.material = QPerVertexColorMaterial()
         self.material.setObjectName("Shared Vertex Color Material")
-        self.scene.addComponent(self.material)
         self.material.setShareable(True)
+        self.scene.addComponent(self.material)
 
         self.transparent = QDiffuseSpecularMaterial()
-        self.transparent.setObjectName("Transparent Material")
+        self.transparent.setObjectName("Shared Transparent Material")
         self.transparent.setShareable(True)
         self.transparent.setAlphaBlendingEnabled(True)
         self.transparent.setDiffuse(QColor(230, 230, 250, 150))
-        # self.transparent.setShininess(150)
         self.scene.addComponent(self.transparent)
 
         self.wireframe = QEntity()
@@ -173,74 +173,85 @@ class IFCQt3dView(QWidget):
 
     def select_object_by_id(self, object_id):
         print("IFCQt3dView.select_object_by_id ", object_id)
-        ifc_object = self.ifc_file.by_guid(object_id)
-        for e in self.unselected.children():
-            if e.objectName() == object_id:
-                e.setParent(self.selections)
-                # Switch the Material from our Mesh Child
-                for c in e.children():
-                    c.removeComponent(self.material)
-                    c.addComponent(self.phong)
-                self.update_scene_graph_tree()
-                self.scene_graph.expandToDepth(1)
-                return
+        for f in self.files.children():
+            for e in f.children():
+                if e.objectName() == object_id:
+                    self.selected.append(e)
+                    # Switch the Material from our Mesh Child
+                    for c in e.children():
+                        if c.property("IsTransparent") is True:
+                            c.removeComponent(self.transparent)
+                        else:
+                            c.removeComponent(self.material)
+                        c.addComponent(self.mat_highlight)
+                    # self.update_scene_graph_tree()
+                    # self.scene_graph.expandToDepth(1)
+                    return
 
     def deselect_object_by_id(self, object_id):
         print("IFCQt3dView.deselect_object_by_id ", object_id)
-        ifc_object = self.ifc_file.by_guid(object_id)
-        for e in self.selections.children():
-            if e.objectName() == object_id:
-                e.setParent(self.unselected)
-                # Switch the Material from our Mesh Child
-                for c in e.children():
-                    c.removeComponent(self.phong)
-                    c.addComponent(self.material)
-                self.update_scene_graph_tree()
-                self.scene_graph.expandToDepth(1)
-                return
+        for f in self.files.children():
+            for e in f.children():
+                if e.objectName() == object_id:
+                    if e in self.selected:
+                        self.selected.remove(e)
+                    # Switch the Material from our Mesh Child
+                    for c in e.children():
+                        c.removeComponent(self.mat_highlight)
+                        if c.property("IsTransparent") is True:
+                            c.addComponent(self.transparent)
+                        else:
+                            c.addComponent(self.material)
+                    # self.update_scene_graph_tree()
+                    # self.scene_graph.expandToDepth(1)
+                    return
 
     def toggle_entity(self, entity):
         print("IFCQt3dView.toggle_entity ", entity.objectName())
-        was_selected = False
-        for e in self.selections.children():
-            if e == entity:
-                was_selected = True
-                e.setParent(self.unselected)
-                # e.setEnabled(True)
-                # Switch the Material from our Mesh Child
-                for c in e.children():
-                    c.removeComponent(self.phong)
-                    c.addComponent(self.material)
-        # set selection
-        if not was_selected:
-            entity.setParent(self.selections)
-            # entity.setEnabled(False)
+        if entity in self.selected:
+            self.selected.remove(entity)
+            # Switch the Material from our Mesh Child
             for c in entity.children():
-                c.removeComponent(self.material)
-                c.addComponent(self.phong)
-
-        self.update_scene_graph_tree()
-        self.scene_graph.expandToDepth(1)
+                c.removeComponent(self.mat_highlight)
+                if c.property("IsTransparent") is True:
+                    c.addComponent(self.transparent)
+                else:
+                    c.addComponent(self.material)
+        else:
+            self.selected.append(entity)
+            # Switch the Material from our Mesh Child
+            for c in entity.children():
+                if c.property("IsTransparent") is True:
+                    c.removeComponent(self.transparent)
+                else:
+                    c.removeComponent(self.material)
+                c.addComponent(self.mat_highlight)
 
     def select_exclusive_entity(self, entity):
         print("IFCQt3dView.select_exclusive_entity ", entity)
-        for e in self.selections.children():
+        for e in self.selected:
             if e is not entity:
-                e.setParent(self.unselected)
+                # Switch the Material from our Mesh Child
                 for c in e.children():
-                    c.removeComponent(self.phong)
-                    c.addComponent(self.material)
+                    c.removeComponent(self.mat_highlight)
+                    if c.property("IsTransparent") is True:
+                        c.addComponent(self.transparent)
+                    else:
+                        c.addComponent(self.material)
                 self.remove_from_selected_entities.emit(e.objectName())
-
-        entity.setParent(self.selections)
-        # e.setEnabled(True)
+        self.selected.clear()
+        self.selected.append(entity)
+        # Switch the Material from our Mesh Child
         for c in entity.children():
-            c.removeComponent(self.material)
-            c.addComponent(self.phong)
+            if c.property("IsTransparent") is True:
+                c.removeComponent(self.transparent)
+            else:
+                c.removeComponent(self.material)
+            c.addComponent(self.mat_highlight)
         self.add_to_selected_entities.emit(entity.objectName())
 
-        self.update_scene_graph_tree()
-        self.scene_graph.expandToDepth(1)
+        # self.update_scene_graph_tree()
+        # self.scene_graph.expandToDepth(1)
 
     def pick(self, e: QPickTriangleEvent):
         # intersection = e.localIntersection()
@@ -249,11 +260,8 @@ class IFCQt3dView(QWidget):
             return
         # Picked mesh is child of container entity "parent"
         parent = entity.parentEntity()
-        ifc_object = self.ifc_file.by_guid(parent.objectName())
-        if hasattr(ifc_object, "Name") and ifc_object.Name is not None:
-            print("IFCQt3dView.pick '" + ifc_object.Name + "' (" + ifc_object.GlobalId + ") - #" + str(ifc_object.id()))
-        else:
-            print("IFCQt3dView.pick (" + ifc_object.GlobalId + ") - #" + str(ifc_object.id()))
+        GlobalId = parent.objectName()
+        print("IFCQt3dView.pick (" + GlobalId + ")")
 
         if e.button() == Qt.LeftButton and e.modifiers() == Qt.ControlModifier:
             self.toggle_entity(parent)
@@ -286,6 +294,7 @@ class IFCQt3dView(QWidget):
     def create_light(self):
         # Light
         self.lights = QEntity(self.scene)
+        self.lights.setObjectName("Lights")
         self.lights.setProperty("IsProduct", True)
 
         # Light 1
@@ -316,12 +325,44 @@ class IFCQt3dView(QWidget):
         light_transform2.setTranslation(QVector3D(10.0, -40.0, 0.0))
         light_entity2.addComponent(light_transform2)
 
+    def close_files(self):
+        for child in self.files.children():
+            child.setParent(None)
+        for wire in self.wireframe.children():
+            wire.setParent(None)
+        self.update_scene_graph_tree()
+        self.model_nodes.clear()
+        self.selected.clear()
+        # self.ifc_files.clear()  # OK or not?
+        pass
+
     def load_file(self, filename):
-        if self.ifc_file is None:
+        """
+        Load the file passed as filename and generates the geometry.
+        If it already exists, the geometry is removed and recreated.
+
+        :param filename: Full path to the IFC file
+        """
+        ifc_file = None
+        if filename in self.ifc_files:
+            ifc_file = self.ifc_files[filename]
+        else:  # Load as new file
             print("Importing IFC file ...")
             start = time.time()
-            self.ifc_file = ifcopenshell.open(filename)
+            ifc_file = ifcopenshell.open(filename)
+            self.ifc_files[filename] = ifc_file
             print("Loaded in ", time.time() - start)
+
+        model_node = None
+        if filename in self.model_nodes:
+            model_node = self.model_nodes[filename]
+            for element in model_node.children():
+                element.setParent(None)
+        else:
+            model_node = QEntity(self.files)
+            self.model_nodes[filename] = model_node
+            model_node.setProperty("IsProduct", True)
+            model_node.setObjectName(filename)
 
         print("Importing IFC geometrical information ...")
         self.start = time.time()
@@ -346,8 +387,8 @@ class IFCQt3dView(QWidget):
         settings.set(settings.USE_PYTHON_OPENCASCADE, True)
 
         # Two methods
-        # self.parse_project(settings)  # SLOWER - create geometry for each product
-        self.parse_geometry(settings)  # FASTER - iteration with parallel processing
+        # self.parse_project(filename, settings)  # SLOWER - create geometry for each product
+        self.parse_geometry(filename, settings)  # FASTER - iteration with parallel processing
         print("\nFinished in ", time.time() - self.start)
 
         self.update_scene_graph_tree()
@@ -374,6 +415,17 @@ class IFCQt3dView(QWidget):
                         #    entity.setEnabled(False)
 
     def update_scene_graph_tree(self, node=None, parent=None):
+        '''
+        Recursive update of the tree representing the 3D scene graph.
+        This only takes the scene_graph itself into account.
+        The TreeItems carry a reference to the QEntity node.
+        The nodes are named with their IFC Object GlobalId.
+        Nodes which represent an IfcProduct (or some grouping),
+        get a check box to toggle the visibility of the QEntity.
+
+        :param node: current QEntity
+        :param parent: parent QTreeWidgetItem
+        '''
         if node is None:
             node = self.root
         if parent is None:
@@ -400,8 +452,9 @@ class IFCQt3dView(QWidget):
         for item in node.children():
             self.update_scene_graph_tree(item, node_item)
 
-    def parse_geometry(self, settings):
-        iterator = ifcopenshell.geom.iterator(settings, self.ifc_file, multiprocessing.cpu_count())
+    def parse_geometry(self, filename, settings):
+        ifc_file = self.ifc_files[filename]
+        iterator = ifcopenshell.geom.iterator(settings, ifc_file, multiprocessing.cpu_count())
         iterator.initialize()
         counter = 0
         while True:
@@ -409,7 +462,7 @@ class IFCQt3dView(QWidget):
             # skip openings and spaces geometry
             if not shape.data.product.is_a('IfcOpeningElement') and not shape.data.product.is_a('IfcSpace'):
                 try:
-                    self.generate_rendermesh(shape)
+                    self.generate_rendermesh(shape, self.model_nodes[filename])
                     print(str("Shape {0}\t[#{1}]\tin {2} seconds")
                           .format(str(counter), str(shape.data.id), time.time() - self.start))
                 except Exception as e:
@@ -420,15 +473,16 @@ class IFCQt3dView(QWidget):
             if not iterator.next():
                 break
 
-    def parse_project(self, settings):
+    def parse_project(self, filename, settings):
+        ifc_file = self.ifc_files[filename]
         # parse all products
-        products = self.ifc_file.by_type('IfcProduct')
+        products = ifc_file.by_type('IfcProduct')
         counter = 0
         for product in products:
             if not product.is_a('IfcOpeningElement') and not product.is_a('IfcSpace'):
                 if product.Representation:
                     shape = ifcopenshell.geom.create_shape(settings, product)
-                    self.generate_rendermesh(shape)
+                    self.generate_rendermesh(shape, self.model_nodes[filename])
                     print(str("Product {0}\t[#{1}]\tin {2} seconds")
                           .format(str(counter), str(product.id()), time.time() - self.start))
             counter += 1
@@ -483,17 +537,24 @@ class IFCQt3dView(QWidget):
 
         return vertices, normals, triangles, edges
 
-    def generate_rendermesh(self, shape):
+    def generate_rendermesh(self, shape, parent):
+        """
+        Collecting the mesh geometry using OCC for the current TopoDS Shape.
+        The vertices, edges, triangles and colors are used to create the
+        Qt3D Entities & Nodes & Components for the 3D Representation.
+
+        :param shape: TopoDS Shape (from OpenCASCADE)
+        :param parent: QEntity parent Node (representing the File node)
+        """
         data = shape.data
         geometry = shape.geometry
         styles = shape.styles
         style_ids = shape.style_ids
 
-        custom_mesh_entity = QEntity(self.unselected)
-        ifc_object = self.ifc_file.by_id(int(shape.data.product.id()))
-        custom_mesh_entity.setObjectName(ifc_object.GlobalId)
+        custom_mesh_entity = QEntity(parent)
+        custom_mesh_entity.setObjectName(shape.data.guid)
         custom_mesh_entity.setProperty("IsProduct", True)
-        custom_mesh_entity.setProperty("GlobalId", ifc_object.GlobalId)
+        custom_mesh_entity.setProperty("GlobalId", shape.data.guid)
 
         it = OCC.Core.TopoDS.TopoDS_Iterator(geometry)
         index = 0
@@ -596,6 +657,7 @@ class IFCQt3dView(QWidget):
             custom_mesh_sub_entity.addComponent(transform)
             if a < 1.0:
                 custom_mesh_sub_entity.addComponent(self.transparent)
+                custom_mesh_sub_entity.setProperty("IsTransparent", True)
             else:
                 custom_mesh_sub_entity.addComponent(self.material)
 
@@ -643,7 +705,7 @@ class IFCQt3dView(QWidget):
             custom_line_renderer.setFirstInstance(0)
 
             # add everything to the scene
-            custom_line_entity = QEntity(self.wireframe)
+            custom_line_entity = QEntity(self.wireframe)  # TODO: rethink scenegraph
             custom_line_entity.setObjectName("Line")
             transform = QTransform()
             transform.setObjectName("Rotate X -90°")
