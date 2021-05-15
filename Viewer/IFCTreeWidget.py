@@ -13,6 +13,22 @@ except Exception:
 import ifcopenshell
 
 
+def entity_summary(entity):
+    """
+    Return a multi-line string containing a summary of information about
+    the IFC entity instance (STEP Id, Name, Class and GlobalId).
+    Can be used in a Tooltip.
+
+    :param entity: The IFC entity instance
+    """
+    myId = str(entity.id()) if hasattr(entity, "id") else "<no id>"
+    myName = entity.Name if hasattr(entity, "Name") else "<no name>"
+    myClass = entity.is_a() if hasattr(entity, "is_a") else "<no class>"
+    myGlobalId = entity.GlobalId if hasattr(entity, "GlobalId") else "<no GlobalId>"
+    return str("STEP id\t: #{}\nName\t: {}\nClass\t: {}\nGlobalId\t: {}").format(
+        myId, myName, myClass, myGlobalId)
+
+
 class IFCTreeWidget(QWidget):
     """
     Fifth version of the IFC Tree Widget/View
@@ -22,14 +38,51 @@ class IFCTreeWidget(QWidget):
     - V4 = Object Tree with references + Property tree with Header data
     - V5 = Editing the name of objects + keeping multiple files in a dictionary
     - V6 = Spinning off the property tree into its own widget
+    - V7 = Make the tree configurable (Decomposition, Root Class Chooser)
     """
     def __init__(self):
         QWidget.__init__(self)
         # A dictionary referring to our files, based on name
         self.ifc_files = {}
+
+        # Main Settings
+        self.root_class = 'IfcProject'
+        self.follow_associations = False
+        self.follow_defines = False
+        self.follow_decomposition = True
+
         # Prepare Tree Widgets in a stretchable layout
         vbox = QVBoxLayout()
         self.setLayout(vbox)
+
+        # Series of buttons and check boxes in a horizontal layout
+        buttons = QWidget()
+        vbox.addWidget(buttons)
+        hbox = QHBoxLayout()
+        hbox.setContentsMargins(0, 0, 0, 0)
+        buttons.setLayout(hbox)
+        # Option : Decomposition
+        self.check_c = QCheckBox("Decomposition")
+        self.check_c.setToolTip("Display the Containment and Decomposition relations in the object tree")
+        self.check_c.setChecked(self.follow_decomposition)
+        self.check_c.toggled.connect(self.toggle_decomposition)
+        hbox.addWidget(self.check_c)
+        # Stretchable Spacer
+        spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
+        hbox.addSpacerItem(spacer)
+        # Root Class Chooser
+        self.root_class_chooser = QComboBox()
+        self.root_class_chooser.setToolTip("Select the top level class to display in the tree")
+        self.root_class_chooser.setMinimumWidth(80)
+        self.root_class_chooser.addItem('IfcProject')
+        self.root_class_chooser.addItem('IfcMaterial')
+        self.root_class_chooser.addItem('IfcProduct')
+        self.root_class_chooser.addItem('IfcRelationship')
+        self.root_class_chooser.addItem('IfcPropertySet')
+        self.root_class_chooser.setEditable(True)
+        self.root_class_chooser.activated.connect(self.toggle_chooser)
+        hbox.addWidget(self.root_class_chooser)
+
         # Object Tree
         self.object_tree = QTreeWidget()
         vbox.addWidget(self.object_tree)
@@ -106,64 +159,30 @@ class IFCTreeWidget(QWidget):
             ifc_file = ifcopenshell.open(filename)
             self.ifc_files[filename] = ifc_file
 
+        self.add_objects(filename)
+        self.prepare_chooser()
+
+    def add_objects(self, filename):
+        """Fill the Object Tree with TreeItems representing Entity Instances
+
+        :param type: The filename for a loaded IFC model (in the files dictionary)
+        :type type: string
+        """
+        ifc_file = self.ifc_files[filename]
         root_item = QTreeWidgetItem([filename, 'File'])
         root_item.setData(0, Qt.UserRole, ifc_file)
-        for item in ifc_file.by_type('IfcProject'):
-            self.add_object_in_tree(item, root_item)
+        try:
+            for item in ifc_file.by_type(self.root_class):
+                self.add_object_in_tree(item, root_item)
+        except:
+            dlg = QMessageBox(self.parent())
+            dlg.setWindowTitle("Invalid IFC Class!")
+            dlg.setStandardButtons(QMessageBox.Ok)
+            dlg.setText(str("{} is not a valid class name.\nSuggestions are IfcProject or IfcWall.").format(self.root_class))
+            dlg.exec_()
         # Finish the GUI
         self.object_tree.addTopLevelItem(root_item)
         self.object_tree.expandToDepth(3)
-
-    # def add_data(self):
-    #     """
-    #     Fill the linked property tree with data from the current selected entities
-    #     """
-    #     self.property_tree.reset()
-    #     items = self.object_tree.selectedItems()
-    #     for item in items:
-    #         # our very first item is the File, so show the Header only
-    #         if item.text(1) == "File":
-    #             ifc_file = self.get_ifc_file_from_treeitem(item)
-    #             self.property_tree.set_file(ifc_file)
-    #             break
-    #
-    #         # get the object
-    #         ifc_object = item.data(0, Qt.UserRole)
-    #         if ifc_object is None:
-    #             break
-    #
-    #         self.property_tree.set_object(ifc_object)
-
-    # methods for Object Tree
-
-    def entity_summary(self, entity):
-        """
-        Return a multi-line string containing a summary of information about
-        the IFC entity instance (STEP Id, Name, Class and GlobalId).
-        Can be used in a Tooltip.
-
-        :param entity: The IFC entity instance
-        """
-        myId = str(entity.id()) if hasattr(entity, "id") else "<no id>"
-        myName = entity.Name if hasattr(entity, "Name") else "<no name>"
-        myClass = entity.is_a() if hasattr(entity, "is_a") else "<no class>"
-        myGlobalId = entity.GlobalId if hasattr(entity, "GlobalId") else "<no GlobalId>"
-        return str("STEP id\t: #{}\nName\t: {}\nClass\t: {}\nGlobalId\t: {}").format(
-            myId, myName, myClass, myGlobalId)
-
-    # def get_ifc_file_from_treeitem(self, tree_item):
-    #     """
-    #     Find the file to which the current item in the tree belongs.
-    #     We find the top level item and check its file reference.
-    #
-    #     :param tree_item: QTreeWidgetItem to start looking from
-    #     :return: The IFC File as a reference.
-    #     """
-    #     # Beware that we may have multiple files
-    #     # So start from the filename of the TopLevelItem
-    #     while tree_item.parent():
-    #         tree_item = tree_item.parent()
-    #     return tree_item.data(0, Qt.UserRole)
 
     def add_object_in_tree(self, ifc_object, parent_item):
         """
@@ -173,18 +192,26 @@ class IFCTreeWidget(QWidget):
         :param ifc_object: an IFC entity instance
         :param parent_item: the parent QTreeWidgetItem
         """
-        tree_item = QTreeWidgetItem([ifc_object.Name, ifc_object.is_a()])  # , ifc_object.GlobalId])
+        my_name = ifc_object.Name if hasattr(ifc_object, "Name") else ""
+        tree_item = QTreeWidgetItem([my_name, ifc_object.is_a()])
         parent_item.addChild(tree_item)
         tree_item.setData(0, Qt.UserRole, ifc_object)
-        tree_item.setToolTip(0, self.entity_summary(ifc_object))
-        if hasattr(ifc_object, 'ContainsElements'):
-            for rel in ifc_object.ContainsElements:
-                for element in rel.RelatedElements:
-                    self.add_object_in_tree(element, tree_item)
-        if hasattr(ifc_object, 'IsDecomposedBy'):
-            for rel in ifc_object.IsDecomposedBy:
-                for related_object in rel.RelatedObjects:
-                    self.add_object_in_tree(related_object, tree_item)
+        tree_item.setToolTip(0, entity_summary(ifc_object))
+
+        if self.follow_decomposition:
+            if hasattr(ifc_object, 'ContainsElements'):
+                for rel in ifc_object.ContainsElements:
+                    for element in rel.RelatedElements:
+                        self.add_object_in_tree(element, tree_item)
+            if hasattr(ifc_object, 'IsDecomposedBy'):
+                for rel in ifc_object.IsDecomposedBy:
+                    for related_object in rel.RelatedObjects:
+                        self.add_object_in_tree(related_object, tree_item)
+            if hasattr(ifc_object, 'IsGroupedBy'):
+                for rel in ifc_object.IsGroupedBy:
+                    if hasattr(rel, 'RelatedObjects'):
+                        for related_object in rel.RelatedObjects:
+                            self.add_object_in_tree(related_object, tree_item)
 
     def set_object_name_edit(self, item, column):
         """
@@ -218,6 +245,31 @@ class IFCTreeWidget(QWidget):
             item.setFlags(tmp | Qt.ItemIsEditable)
         elif tmp & Qt.ItemIsEditable:
             item.setFlags(tmp ^ Qt.ItemIsEditable)
+
+    def toggle_decomposition(self):
+        self.follow_decomposition = not self.follow_decomposition
+        self.regenerate_tree()
+
+    def toggle_chooser(self, text):
+        self.root_class = self.root_class_chooser.currentText()
+        self.regenerate_tree()
+
+    def prepare_chooser(self):
+        self.root_class_chooser.clear()
+        for _, file in self.ifc_files.items():
+            for t in file.wrapped_data.types():
+                if self.root_class_chooser.findText(t, Qt.MatchContains) == -1:
+                    self.root_class_chooser.addItem(t)
+
+        # Add all available classes in the Combobox
+        self.root_class_chooser.setEditable(False)
+        self.root_class_chooser.setCurrentText('IfcProject')
+        self.root_class_chooser.model().sort(0, Qt.AscendingOrder)
+
+    def regenerate_tree(self):
+        self.object_tree.clear()
+        for filename, file in self.ifc_files.items():
+            self.add_objects(filename)
 
 
 if __name__ == '__main__':
