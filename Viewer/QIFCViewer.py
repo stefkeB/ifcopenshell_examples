@@ -1,5 +1,6 @@
 from IFCQt3DView import *
 from IFCTreeWidget import *
+from IFCPropertyWidget import *
 
 
 class QIFCViewer(QMainWindow):
@@ -7,6 +8,7 @@ class QIFCViewer(QMainWindow):
     IFC Model Viewer
     - V1 = Loading the IFCTreeWidget and IFCQt3dView together (as-is)
     - V2 = Open + Save methods, Toolbar and Status Bar & Files in a Dictionary
+    - V3 = Use separate Tree Views as two separate Dock Widgets and link them
     """
     def __init__(self):
         QMainWindow.__init__(self)
@@ -50,21 +52,27 @@ class QIFCViewer(QMainWindow):
 
         self.setStatusBar(QStatusBar(self))
 
-        # 3D Widget
+        # Main Widgets
         self.view_3d = IFCQt3dView()
-        # Tree Widget
         self.view_tree = IFCTreeWidget()
+        self.view_properties = IFCPropertyWidget()
 
         # Selection Syncing
         self.view_tree.select_object.connect(self.view_3d.select_object_by_id)
         self.view_tree.deselect_object.connect(self.view_3d.deselect_object_by_id)
         self.view_3d.add_to_selected_entities.connect(self.view_tree.receive_selection)
+        self.view_tree.send_selection_set.connect(self.view_properties.set_from_selected_items)
 
         # Docking Widgets
         self.dock = QDockWidget('Model Tree', self)
         self.dock.setWidget(self.view_tree)
         self.dock.setFloating(False)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
+
+        self.dock2 = QDockWidget('Property Tree', self)
+        self.dock2.setWidget(self.view_properties)
+        self.dock2.setFloating(False)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.dock2)
 
         # Main Widget = 3D View
         self.setCentralWidget(self.view_3d)
@@ -134,6 +142,7 @@ class QIFCViewer(QMainWindow):
         """
         self.ifc_files = {}
         self.view_tree.close_files()
+        self.view_properties.reset()
         self.view_3d.close_files()
         self.setWindowTitle("IFC Viewer")
 

@@ -16,6 +16,7 @@ In addition, due to performance reasons, also the `OCC` library (a Python wrappe
 * V2 = Adding Edge display
 * V3 = Draw an Origin and Axis
 * V4 = Object Picking + Selection syncing + Scene-Graph viewer
+* V5 = Working with multiple files (+ reorganise Scene-Graph again)
 
 ## IFCTreeWidget.py
 
@@ -24,3 +25,5 @@ A widget to contain both a Spatial Tree and a separate Tree to visualise propert
 * V1 = Single Tree (object & basic hierarchy)
 * V2 = Double Tree (type, properties, quantities, attributes)
 * V3 = Selection Syncing (for the 3D View)
+* V4 = Using object references, Show Header Data
+* V5 = Editing object names + support multiple files
