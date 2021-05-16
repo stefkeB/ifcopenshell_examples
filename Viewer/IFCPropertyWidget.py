@@ -201,6 +201,7 @@ class IFCPropertyWidget(QWidget):
                         # self.add_attributes_in_tree(nested_prop, property_nesteditem)
                 else:
                     property_item = QTreeWidgetItem([prop.Name, '<not handled>', unit])
+                    property_item.setData(1, Qt.UserRole, prop)
                     parent_item.addChild(property_item)
 
     def add_quantities_in_tree(self, quantity_set, parent_item):
