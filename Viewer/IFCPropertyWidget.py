@@ -89,8 +89,8 @@ class IFCPropertyWidget(QWidget):
         vbox.addWidget(self.property_tree)
         self.property_tree.setColumnCount(3)
         self.property_tree.setHeaderLabels(["Name", "Value", "ID/Type"])
-        self.property_tree.itemDoubleClicked.connect(self.check_object_name_edit)
-        self.property_tree.itemChanged.connect(self.set_object_name_edit)
+        self.property_tree.itemDoubleClicked.connect(self.check_value_edit)
+        self.property_tree.itemChanged.connect(self.set_value_edit)
 
     def set_from_selected_items(self, items):
         """
@@ -161,6 +161,7 @@ class IFCPropertyWidget(QWidget):
                         my_value = self.get_friendly_ifc_name(nested_entity)
                         my_type = "#" + str(nested_entity.id())
                         nested_item = QTreeWidgetItem([my_name, my_value, my_type])
+                        nested_item.setData(1, Qt.UserRole, nested_entity)  # remember the owner of this attribute
                         attribute_item.addChild(nested_item)
                         try:
                             self.add_attributes_in_tree(nested_entity, nested_item,
@@ -430,7 +431,7 @@ class IFCPropertyWidget(QWidget):
 
     # Tree Editing
 
-    def set_object_name_edit(self, item, column):
+    def set_value_edit(self, item, column):
         """
         Send the change back to the item
 
@@ -486,7 +487,7 @@ class IFCPropertyWidget(QWidget):
                     if att_name == "Name":
                         self.send_update_object.emit(ifc_object)
 
-    def check_object_name_edit(self, item, column):
+    def check_value_edit(self, item, column):
         """
         Check whether this item can be edited
 
