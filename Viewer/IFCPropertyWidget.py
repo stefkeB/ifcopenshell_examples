@@ -21,7 +21,12 @@ class IFCPropertyWidget(QWidget):
     and associated materials, classifications.
     - V1 = Spin-off from IFCTreeWidget
     - V2 = Configurable display options (Properties, Associations, Attributes + Full detail)
+    - V3 = Refining, add Assignments
+    - V4 = Editing Attributes (STRING, DOUBLE, INT and ENUMERATION)
     """
+
+    send_update_object = pyqtSignal(object)
+
     def __init__(self):
         QWidget.__init__(self)
         # The list of the currently loaded objects
@@ -31,6 +36,7 @@ class IFCPropertyWidget(QWidget):
         self.follow_attributes = False
         self.follow_properties = True
         self.follow_associations = False
+        self.follow_assignments = False
         self.follow_defines = False
         self.show_all = False
 
@@ -57,17 +63,23 @@ class IFCPropertyWidget(QWidget):
         self.check_p.toggled.connect(self.toggle_properties)
         hbox.addWidget(self.check_p)
         # Option: Display Associations
-        self.check_s = QCheckBox("Associations")
-        self.check_s.setToolTip("Display associations, such as materials and classifications")
-        self.check_s.setChecked(self.follow_associations)
-        self.check_s.toggled.connect(self.toggle_associations)
-        hbox.addWidget(self.check_s)
+        check_associations = QCheckBox("Associations")
+        check_associations.setToolTip("Display associations, such as materials and classifications")
+        check_associations.setChecked(self.follow_associations)
+        check_associations.toggled.connect(self.toggle_associations)
+        hbox.addWidget(check_associations)
+        # Option: Display Assignments
+        check_assignments = QCheckBox("Assignments")
+        check_assignments.setToolTip("Display assignments, such as control, actor, process, group")
+        check_assignments.setChecked(self.follow_assignments)
+        check_assignments.toggled.connect(self.toggle_assignments)
+        hbox.addWidget(check_assignments)
         # Option: Display Full Detail
-        self.check_g = QCheckBox("Full")
-        self.check_g.setToolTip("Show the full attributes hierarchy")
-        self.check_g.setChecked(self.show_all)
-        self.check_g.toggled.connect(self.toggle_show_all)
-        hbox.addWidget(self.check_g)
+        check_full_detail = QCheckBox("Full")
+        check_full_detail.setToolTip("Show the full attributes hierarchy")
+        check_full_detail.setChecked(self.show_all)
+        check_full_detail.toggled.connect(self.toggle_show_all)
+        hbox.addWidget(check_full_detail)
         # Stretchable Spacer
         spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
         hbox.addSpacerItem(spacer)
@@ -77,6 +89,8 @@ class IFCPropertyWidget(QWidget):
         vbox.addWidget(self.property_tree)
         self.property_tree.setColumnCount(3)
         self.property_tree.setHeaderLabels(["Name", "Value", "ID/Type"])
+        self.property_tree.itemDoubleClicked.connect(self.check_object_name_edit)
+        self.property_tree.itemChanged.connect(self.set_object_name_edit)
 
     def set_from_selected_items(self, items):
         """
@@ -84,7 +98,6 @@ class IFCPropertyWidget(QWidget):
         Can be used to link from the Object Tree Widget
 
         :param items: List of QTreeWidgetItems (containing data in column 1)
-
         """
         self.reset()
         for item in items:
@@ -100,12 +113,18 @@ class IFCPropertyWidget(QWidget):
                     break
                 self.add_object_data(ifc_object)
 
+    # Filling the tree with information
+
     def add_attributes_in_tree(self, ifc_object, parent_item, recursion=0):
         """
-        Fill the property tree with the attributes of an object
+        Fill the property tree with the attributes of an object. When the "show all"
+        option is activated, this will enable recursive attribute display. This can
+        potentially go very deep and take a long time with deep structures or
+        large geometry.
 
         :param ifc_object: IfcPropertySet containing individual properties
         :param parent_item: QTreeWidgetItem used to put attributes underneath
+        :param recursion: To avoid infinite recursion, the recursion level is checked
         """
         for att_idx in range(0, len(ifc_object)):
             # https://github.com/jakob-beetz/IfcOpenShellScriptingTutorial/wiki/02:-Inspecting-IFC-instance-objects
@@ -115,6 +134,13 @@ class IFCPropertyWidget(QWidget):
             if not self.show_all and (att_type == ('ENTITY INSTANCE' or 'AGGREGATE OF ENTITY INSTANCE')):
                 att_value = ''
             attribute_item = QTreeWidgetItem([att_name, att_value, att_type])
+            attribute_item.setData(1, Qt.UserRole, ifc_object)  # remember the owner of this attribute
+
+            if att_type == 'ENUMERATION':
+                enums = get_enums_from_object(ifc_object, att_name)
+                attribute_item.setStatusTip(1, ' - '.join(enums))
+                attribute_item.setToolTip(1, ' - '.join(enums))
+
             parent_item.addChild(attribute_item)
 
             # Skip?
@@ -123,14 +149,14 @@ class IFCPropertyWidget(QWidget):
                     continue
 
             # Recursive call to display the attributes of ENTITY INSTANCES and AGGREGATES
-            entity = ifc_object[att_idx]
-            if entity is not None and recursion < 20:
+            attribute = ifc_object[att_idx]
+            if attribute is not None and recursion < 20:
                 if att_type == 'ENTITY INSTANCE':
-                    self.add_attributes_in_tree(entity, attribute_item, recursion + 1)
+                    self.add_attributes_in_tree(attribute, attribute_item, recursion + 1)
                 if att_type == 'AGGREGATE OF ENTITY INSTANCE':
                     counter = 0
-                    attribute_item.setText(0, attribute_item.text(0) + ' [' + str(len(entity)) + ']')
-                    for nested_entity in entity:
+                    attribute_item.setText(0, attribute_item.text(0) + ' [' + str(len(attribute)) + ']')
+                    for nested_entity in attribute:
                         my_name = "[" + str(counter) + "]"
                         my_value = self.get_friendly_ifc_name(nested_entity)
                         my_type = "#" + str(nested_entity.id())
@@ -152,14 +178,16 @@ class IFCPropertyWidget(QWidget):
         :param parent_item: QTreeWidgetItem used to put properties underneath
         """
         for prop in property_set.HasProperties:
-            if (self.show_all):
+            if self.show_all:
                 self.add_attributes_in_tree(prop, parent_item)
             else:
                 unit = str(prop.Unit) if hasattr(prop, 'Unit') else ''
                 prop_value = '<not handled>'
                 if prop.is_a('IfcPropertySingleValue'):
                     prop_value = str(prop.NominalValue.wrappedValue)
-                    parent_item.addChild(QTreeWidgetItem([prop.Name, prop_value, unit]))
+                    prop_item = QTreeWidgetItem([prop.Name, prop_value, unit])
+                    prop_item.setData(1, Qt.UserRole, prop)
+                    parent_item.addChild(prop_item)
                 elif prop.is_a('IfcComplexProperty'):
                     property_item = QTreeWidgetItem([prop.Name, '', unit])
                     parent_item.addChild(property_item)
@@ -167,6 +195,7 @@ class IFCPropertyWidget(QWidget):
                         nested_unit = str(nested_prop.Unit) if hasattr(nested_prop, 'Unit') else ''
                         property_nested_item = QTreeWidgetItem(
                             [nested_prop.Name, str(nested_prop.NominalValue.wrappedValue), nested_unit])
+                        property_nested_item.setData(1, Qt.UserRole, nested_prop)
                         property_item.addChild(property_nested_item)
                         # self.add_attributes_in_tree(nested_prop, property_nesteditem)
                 else:
@@ -260,7 +289,7 @@ class IFCPropertyWidget(QWidget):
             # self.add_inverseattributes_in_tree(ifc_object, inv_attributes_item)
 
         # Has Assignments
-        if self.show_all and hasattr(ifc_object, 'HasAssignments'):
+        if self.follow_assignments and hasattr(ifc_object, 'HasAssignments'):
             buffer = "HasAssignments [" + str(len(ifc_object.HasAssignments)) + "]"
             assignments_item = QTreeWidgetItem([buffer, self.get_friendly_ifc_name(ifc_object)])
             self.property_tree.addTopLevelItem(assignments_item)
@@ -358,6 +387,8 @@ class IFCPropertyWidget(QWidget):
         s = s[4:]
         return s
 
+    # Configuring the tree
+
     def reset(self):
         self.property_tree.clear()
         self.loaded_objects_and_files.clear()
@@ -385,6 +416,10 @@ class IFCPropertyWidget(QWidget):
         self.follow_associations = not self.follow_associations
         self.regenerate()
 
+    def toggle_assignments(self):
+        self.follow_assignments = not self.follow_assignments
+        self.regenerate()
+
     def toggle_defines(self):
         self.follow_defines = not self.follow_defines
         self.regenerate()
@@ -392,6 +427,131 @@ class IFCPropertyWidget(QWidget):
     def toggle_show_all(self):
         self.show_all = not self.show_all
         self.regenerate()
+
+    # Tree Editing
+
+    def set_object_name_edit(self, item, column):
+        """
+        Send the change back to the item
+
+        :param item: QTreeWidgetItem
+        :param int column: Column index
+        :return:
+        """
+        if column == 1 and item.text(2) in ['STRING', 'DOUBLE', 'ENUMERATION', 'INT']:
+            att_name = item.text(0)
+            att_new_value = item.text(1)
+            # if item.text(2) == 'ENUMERATION':
+            #    att_old_value = item.data(1, Qt.UserRole + 1)
+            #    combo = self.combo
+            #    att_new_value = self.combo.currentText()
+            #    # self.combo.setParent(None)
+            #    # self.combo = None
+            ifc_object = item.data(1, Qt.UserRole)
+            if ifc_object is not None:
+                att_index = ifc_object.wrapped_data.get_argument_index(att_name)
+                att_value = ifc_object.wrapped_data.get_argument(att_index)
+                # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
+                att_type = ifc_object.attribute_type(att_index)
+
+                print("Attribute", att_index, "current:", att_value, "new:", att_new_value)
+                if att_value != att_new_value and hasattr(ifc_object, att_name):
+                    try:
+                        val = att_new_value  # default as STRING
+                        if att_type == 'INT':
+                            val = int(att_new_value)
+                            setattr(ifc_object, item.text(0), val)
+                        if att_type == 'DOUBLE':
+                            val = float(att_new_value)
+                            setattr(ifc_object, item.text(0), val)
+                        if att_type == 'ENUMERATION':
+                            schema = ifcopenshell.ifcopenshell_wrapper.schema_by_name('IFC2x3')
+                            e_class = schema.declaration_by_name(ifc_object.is_a())
+                            attribute = e_class.attribute_by_index(att_index)
+                            enum = attribute.type_of_attribute().declared_type().enumeration_items()
+                            if val in enum:
+                                print('Valid enum value')
+                                setattr(ifc_object, item.text(0), val)
+                            else:
+                                print('Invalid enum value')
+                                item.setText(1, str(att_value))
+                        if att_type == 'STRING':
+                            setattr(ifc_object, item.text(0), att_value)
+                    except:
+                        print("Could not set Attribute :", item.text(0), " with value ", att_new_value)
+                        print("So we reset it to ", att_value)
+                        item.setText(1, str(att_value))
+                        pass
+                    # Warn other views, but only needed if Name is changed
+                    if att_name == "Name":
+                        self.send_update_object.emit(ifc_object)
+
+    def check_object_name_edit(self, item, column):
+        """
+        Check whether this item can be edited
+
+        :param item: QTreeWidgetItem
+        :param column: Column index
+        :return:
+        """
+        if item.text(0) == 'GlobalId': return  # We don't want to allow changing this
+        ifc_object = item.data(1, Qt.UserRole)
+        if ifc_object is not None:
+            if column == 1 and item.text(2) in ['STRING', 'DOUBLE', 'ENUMERATION', 'INT']:
+                tmp = item.flags()
+                if column == 1:
+                    item.setFlags(tmp | Qt.ItemIsEditable)
+                    # Get my index
+                    #if item.text(2) == 'ENUMERATION':
+                    #    tree = item.treeWidget()
+                    #    index = tree.indexFromItem(item, 1)
+                    #    enums = get_enums_from_object(ifc_object, item.text(0))
+
+                        # Insert a ComboBox
+                        # self.combo = QComboBox()
+                        # self.combo.addItems(enums)
+                        # self.combo.setCurrentText(item.text(1))
+                        # item.setData(1, Qt.UserRole + 1, item.text(1))  # current value
+                        # # item.setData(1, Qt.UserRole + 2, self.combo)  # the combo box
+                        # # item.setText(1, '')
+                        # tree.setIndexWidget(index, self.combo)
+                        # self.combo.activated.connect(tree.itemChanged)
+
+
+                elif tmp & Qt.ItemIsEditable:
+                    item.setFlags(tmp ^ Qt.ItemIsEditable)
+
+
+class PopupView(QWidget):
+    def __init__(self, parent=None):
+        super(PopupView, self).__init__(parent)
+        self.setWindowFlags(Qt.Popup)
+
+
+def get_enums_from_object(ifc_object, att_name):
+    """
+    Only works for IFC2X3 at the moment
+    """
+    if hasattr(ifc_object, att_name):
+        att_index = ifc_object.wrapped_data.get_argument_index(att_name)
+        att_value = ifc_object.wrapped_data.get_argument(att_index)
+        # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
+        att_type = ifc_object.attribute_type(att_index)
+        if att_type == 'ENUMERATION':
+            schema = ifcopenshell.ifcopenshell_wrapper.schema_by_name('IFC2x3')
+            e_class = schema.declaration_by_name(ifc_object.is_a())
+            attribute = e_class.attribute_by_index(att_index)
+            return attribute.type_of_attribute().declared_type().enumeration_items()
+
+class ItemDelegate(QItemDelegate):
+    def __init__(self, parent):
+        super(ItemDelegate, self).__init__(parent)
+
+    def createEditor(self, parent, option, index):
+        return PopupView(parent)
+
+    def updateEditorGeometry(self, editor, option, index):
+        editor.move(QCursor.pos())
 
 
 if __name__ == '__main__':

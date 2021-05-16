@@ -9,6 +9,7 @@ class QIFCViewer(QMainWindow):
     - V1 = Loading the IFCTreeWidget and IFCQt3dView together (as-is)
     - V2 = Open + Save methods, Toolbar and Status Bar & Files in a Dictionary
     - V3 = Use separate Tree Views as two separate Dock Widgets and link them
+    - V4 = Syncing updates & edits of values between Object and Property Tree
     """
     def __init__(self):
         QMainWindow.__init__(self)
@@ -62,6 +63,8 @@ class QIFCViewer(QMainWindow):
         self.view_tree.deselect_object.connect(self.view_3d.deselect_object_by_id)
         self.view_3d.add_to_selected_entities.connect(self.view_tree.receive_selection)
         self.view_tree.send_selection_set.connect(self.view_properties.set_from_selected_items)
+        # Update Syncing
+        self.view_properties.send_update_object.connect(self.view_tree.receive_object_update)
 
         # Docking Widgets
         self.dock = QDockWidget('Model Tree', self)

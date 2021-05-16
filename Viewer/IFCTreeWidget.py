@@ -136,6 +136,16 @@ class IFCTreeWidget(QWidget):
                     self.object_tree.scrollTo(index)
             iterator += 1
 
+    def receive_object_update(self, ifc_object):
+        iterator = QTreeWidgetItemIterator(self.object_tree)
+        while iterator.value():
+            item = iterator.value()
+            entity = item.data(0, Qt.UserRole)
+            if entity == ifc_object:
+                # refresh my name
+                item.setText(0, ifc_object.Name)
+            iterator += 1
+
     def close_files(self):
         self.ifc_files.clear()
         self.object_tree.clear()
@@ -227,7 +237,9 @@ class IFCTreeWidget(QWidget):
         if ifc_object is not None:
             if hasattr(ifc_object, "Name"):
                 ifc_object.Name = item.text(0)
-        self.add_data()  # refresh the tree
+                # warn other views/widgets
+                items = self.object_tree.selectedItems()
+                self.send_selection_set.emit(items)
 
     def check_object_name_edit(self, item, column):
         """
