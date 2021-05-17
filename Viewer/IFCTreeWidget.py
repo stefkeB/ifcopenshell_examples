@@ -175,8 +175,8 @@ class IFCTreeWidget(QWidget):
     def add_objects(self, filename):
         """Fill the Object Tree with TreeItems representing Entity Instances
 
-        :param type: The filename for a loaded IFC model (in the files dictionary)
-        :type type: string
+        :param filename: The filename for a loaded IFC model (in the files dictionary)
+        :type filename: str
         """
         ifc_file = self.ifc_files[filename]
         root_item = QTreeWidgetItem([filename, 'File'])
@@ -200,7 +200,9 @@ class IFCTreeWidget(QWidget):
         children, as defined by the relationships
 
         :param ifc_object: an IFC entity instance
+        :type ifc_object: entity_instance
         :param parent_item: the parent QTreeWidgetItem
+        :type parent_item: QTreeWidgetItem
         """
         my_name = ifc_object.Name if hasattr(ifc_object, "Name") else ""
         tree_item = QTreeWidgetItem([my_name, ifc_object.is_a()])
@@ -267,6 +269,7 @@ class IFCTreeWidget(QWidget):
         self.regenerate_tree()
 
     def prepare_chooser(self):
+        buffer = self.root_class_chooser.currentText()
         self.root_class_chooser.clear()
         for _, file in self.ifc_files.items():
             for t in file.wrapped_data.types():
@@ -275,7 +278,7 @@ class IFCTreeWidget(QWidget):
 
         # Add all available classes in the Combobox
         self.root_class_chooser.setEditable(False)
-        self.root_class_chooser.setCurrentText('IfcProject')
+        self.root_class_chooser.setCurrentText(buffer)
         self.root_class_chooser.model().sort(0, Qt.AscendingOrder)
 
     def regenerate_tree(self):

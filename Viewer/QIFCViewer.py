@@ -33,10 +33,17 @@ class QIFCViewer(QMainWindow):
 
         action_save = QAction("Save All", self)
         action_save.setShortcut("CTRL+S")
-        action_save.setStatusTip("Saves all IFC Models")
+        action_save.setStatusTip("Confirm saving of all IFC Models")
         action_save.triggered.connect(self.save_files)
         toolbar.addAction(action_save)
         file_menu.addAction(action_save)
+
+        action_reload = QAction("Reload All", self)
+        action_reload.setShortcut("CTRL+R")
+        action_reload.setStatusTip("Reload all IFC Models")
+        action_reload.triggered.connect(self.reload_files)
+        toolbar.addAction(action_reload)
+        file_menu.addAction(action_reload)
 
         action_close = QAction("Close All", self)
         action_close.setShortcut("CTRL+W")
@@ -113,12 +120,26 @@ class QIFCViewer(QMainWindow):
         print("Loaded all views in ", time.time() - start)
         return True
 
+    def reload_files(self):
+        """
+        Reload all currently open files
+        """
+        for ifc_filename, ifc_file in self.ifc_files.items():
+            self.load_file(ifc_filename)
+
     def save_files(self):
         """
         Save all currently loaded files
         """
         for ifc_filename, ifc_file in self.ifc_files.items():
-            ifc_file.write(ifc_filename)
+
+            dlg = QMessageBox(self.parent())
+            dlg.setWindowTitle("Confirm file save")
+            dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            dlg.setText(str("Do you want to save: {}?").format(ifc_filename))
+            button = dlg.exec_()
+            if button == QMessageBox.Ok:
+                ifc_file.write(ifc_filename)
 
     def get_file(self):
         """
