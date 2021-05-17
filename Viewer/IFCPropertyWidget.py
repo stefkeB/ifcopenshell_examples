@@ -171,7 +171,7 @@ class IFCPropertyWidget(QWidget):
                     attribute_item0.setText(attribute_item0.text() + ' [' + str(len(attribute)) + ']')
                     for counter, nested_entity in enumerate(attribute):
                         nested_item0 = QStandardItem("[" + str(counter) + "]")
-                        nested_item1 = QStandardItem(self.get_friendly_ifc_name(nested_entity))
+                        nested_item1 = QStandardItem(get_friendly_ifc_name(nested_entity))
                         nested_item2 = QStandardItem("#" + str(nested_entity.id()))
                         nested_item1.setData(nested_entity, Qt.UserRole)  # remember the owner of this attribute
                         attribute_item0.appendRow([nested_item0, nested_item1, nested_item2])
@@ -307,12 +307,12 @@ class IFCPropertyWidget(QWidget):
         if self.follow_attributes:
             my_id = ifc_object.GlobalId if hasattr(ifc_object, "GlobalId") else str("#{}").format(ifc_object.id())
             attributes_item1 = QStandardItem("Attributes")
-            attributes_item2 = QStandardItem(self.get_friendly_ifc_name(ifc_object))
+            attributes_item2 = QStandardItem(get_friendly_ifc_name(ifc_object))
             attributes_item3 = QStandardItem(my_id)
             self.model.invisibleRootItem().appendRow([attributes_item1, attributes_item2, attributes_item3])
             self.add_attributes_in_tree(ifc_object, attributes_item1)
 
-            # inv_attributes_item = QTreeWidgetItem(["Inverse Attributes", self.get_friendly_ifc_name(ifc_object), my_id])
+            # inv_attributes_item = QTreeWidgetItem(["Inverse Attributes", get_friendly_ifc_name(ifc_object), my_id])
             # self.property_tree.addTopLevelItem(inv_attributes_item)
             # self.add_inverseattributes_in_tree(ifc_object, inv_attributes_item)
 
@@ -320,14 +320,14 @@ class IFCPropertyWidget(QWidget):
         if self.follow_assignments and hasattr(ifc_object, 'HasAssignments'):
             buffer = "HasAssignments [" + str(len(ifc_object.HasAssignments)) + "]"
             assignments_item0 = QStandardItem(buffer)
-            assignments_item1 = QStandardItem(self.get_friendly_ifc_name(ifc_object))
+            assignments_item1 = QStandardItem(get_friendly_ifc_name(ifc_object))
             self.model.invisibleRootItem().appendRow([assignments_item0, assignments_item1])
             counter = 0
             for assignment in ifc_object.HasAssignments:
                 ass_name = assignment.Name if assignment.Name is not None else '[' + str(counter) + ']'
                 ass_item0 = QStandardItem(ass_name)
                 ass_item0.setData(assignment, Qt.UserRole)
-                ass_item1 = QStandardItem(self.get_friendly_ifc_name(assignment))
+                ass_item1 = QStandardItem(get_friendly_ifc_name(assignment))
                 ass_item2 = QStandardItem(assignment.GlobalId)
                 assignments_item0.appendRow([ass_item0, ass_item1, ass_item2])
                 self.add_attributes_in_tree(assignment, ass_item0)
@@ -338,7 +338,7 @@ class IFCPropertyWidget(QWidget):
         if self.show_all and (self.follow_defines or self.follow_properties) and hasattr(ifc_object,
                                                                                          'IsDefinedBy'):
             item0 = QStandardItem("IsDefinedBy [" + str(len(ifc_object.IsDefinedBy)) + "]")
-            item1 = QStandardItem(self.get_friendly_ifc_name(ifc_object))
+            item1 = QStandardItem(get_friendly_ifc_name(ifc_object))
             self.model.invisibleRootItem().appendRow([item0, item1])
             counter = 0
             for definition in ifc_object.IsDefinedBy:
@@ -349,7 +349,7 @@ class IFCPropertyWidget(QWidget):
                 def_name = definition.Name if definition.Name is not None else '[' + str(counter) + ']'
                 def_item0 = QStandardItem(def_name)
                 def_item0.setData(definition, Qt.UserRole)
-                def_item1 = QStandardItem(self.get_friendly_ifc_name(definition))
+                def_item1 = QStandardItem(get_friendly_ifc_name(definition))
                 def_item2 = QStandardItem(definition.GlobalId)
                 item0.appendRow([def_item0, def_item1, def_item2])
                 self.add_attributes_in_tree(definition, def_item0)
@@ -359,7 +359,7 @@ class IFCPropertyWidget(QWidget):
             for definition in ifc_object.IsDefinedBy:
                 if self.follow_defines and definition.is_a('IfcRelDefinesByType'):
                     type_object = definition.RelatingType
-                    s = self.get_friendly_ifc_name(type_object)
+                    s = get_friendly_ifc_name(type_object)
                     type_item0 = QStandardItem(type_object.Name)
                     type_item0.setData(type_item0, Qt.UserRole)
                     type_item1 = QStandardItem(s)
@@ -370,7 +370,7 @@ class IFCPropertyWidget(QWidget):
                     property_set = definition.RelatingPropertyDefinition
                     prop_item0 = QStandardItem(property_set.Name)
                     prop_item0.setData(property_set, Qt.UserRole)
-                    prop_item1 = QStandardItem(self.get_friendly_ifc_name(property_set))
+                    prop_item1 = QStandardItem(get_friendly_ifc_name(property_set))
                     prop_item2 = QStandardItem(property_set.GlobalId)
                     self.model.invisibleRootItem().appendRow([prop_item0, prop_item1, prop_item2])
                     # the individual properties/quantities
@@ -382,12 +382,12 @@ class IFCPropertyWidget(QWidget):
         # Associations (Materials, Classification, ...)
         if self.follow_associations and hasattr(ifc_object, 'HasAssociations'):
             item0 = QStandardItem("Associations [" + str(len(ifc_object.HasAssociations)) + "]")
-            item1 = QStandardItem(self.get_friendly_ifc_name(ifc_object))
+            item1 = QStandardItem(get_friendly_ifc_name(ifc_object))
             self.model.invisibleRootItem().appendRow([item0, item1])
             for association in ifc_object.HasAssociations:
                 def_item0 = QStandardItem(association.Name)
                 def_item0.setData(association, Qt.UserRole)
-                def_item1 = QStandardItem(self.get_friendly_ifc_name(association))
+                def_item1 = QStandardItem(get_friendly_ifc_name(association))
                 def_item2 = QStandardItem(association.GlobalId)
                 item0.appendRow([def_item0, def_item1, def_item2])
                 # and one step deeper
@@ -399,7 +399,7 @@ class IFCPropertyWidget(QWidget):
                             for mat in relating_material.Materials:
                                 mat_item0 = QStandardItem(mat.Name)
                                 mat_item0.setData(mat, Qt.UserRole)
-                                mat_item1 = QStandardItem(self.get_friendly_ifc_name(mat))
+                                mat_item1 = QStandardItem(get_friendly_ifc_name(mat))
                                 mat_item2 = QStandardItem(str('#' + mat.id()))
                                 def_item0.appendRow([mat_item0, mat_item1, mat_item2])
                                 self.add_attributes_in_tree(mat, mat_item0)
@@ -408,7 +408,7 @@ class IFCPropertyWidget(QWidget):
                             for layer in relating_material.MaterialLayers:
                                 mat_item0 = QStandardItem(layer.Name)
                                 mat_item0.setData(layer, Qt.UserRole)
-                                mat_item1 = QStandardItem(self.get_friendly_ifc_name(layer))
+                                mat_item1 = QStandardItem(get_friendly_ifc_name(layer))
                                 mat_item2 = QStandardItem(str('#' + layer.id()))
                                 def_item0.appendRow([mat_item0, mat_item1, mat_item2])
                                 self.add_attributes_in_tree(layer, mat_item0)
@@ -421,15 +421,6 @@ class IFCPropertyWidget(QWidget):
                     self.add_attributes_in_tree(relating_classification, def_item0)
 
         self.property_tree.expandAll()
-
-    def camel_case_split(self, str):
-        return re.findall(r'[A-Z](?:[a-z]+|[A-Z]*(?=[A-Z]|$))', str)
-
-    def get_friendly_ifc_name(self, ifc_object):
-        # Trick to split the IfcClass into separate words
-        s = ' '.join(self.camel_case_split(str(ifc_object.is_a())))
-        s = s[4:]
-        return s
 
     # Configuring the tree
 
@@ -596,10 +587,31 @@ def get_enums_from_object(ifc_object, att_name):
         # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
         att_type = ifc_object.attribute_type(att_index)
         if att_type == 'ENUMERATION':
-            schema = ifcopenshell.ifcopenshell_wrapper.schema_by_name('IFC2x3')
-            e_class = schema.declaration_by_name(ifc_object.is_a())
-            attribute = e_class.attribute_by_index(att_index)
-            return attribute.type_of_attribute().declared_type().enumeration_items()
+            try:
+                schema = ifcopenshell.ifcopenshell_wrapper.schema_by_name('IFC2x3')
+                e_class = schema.declaration_by_name(ifc_object.is_a())
+                attribute = e_class.attribute_by_index(att_index)
+                return attribute.type_of_attribute().declared_type().enumeration_items()
+            except:
+                pass
+            try:
+                schema = ifcopenshell.ifcopenshell_wrapper.schema_by_name('IFC4')
+                e_class = schema.declaration_by_name(ifc_object.is_a())
+                attribute = e_class.attribute_by_index(att_index)
+                return attribute.type_of_attribute().declared_type().enumeration_items()
+            except:
+                pass
+
+
+def camel_case_split(string):
+    return re.findall(r'[A-Z](?:[a-z]+|[A-Z]*(?=[A-Z]|$))', string)
+
+
+def get_friendly_ifc_name(ifc_object):
+    # Trick to split the IfcClass into separate words
+    s = ' '.join(camel_case_split(str(ifc_object.is_a())))
+    s = s[4:]
+    return s
 
 
 class ItemDelegate(QItemDelegate):
