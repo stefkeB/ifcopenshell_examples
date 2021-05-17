@@ -51,25 +51,25 @@ class IFCPropertyWidget(QWidget):
         hbox.setContentsMargins(0, 0, 0, 0)
         buttons.setLayout(hbox)
         # Option: Display Attributes
-        self.check_a = QCheckBox("Attributes")
+        self.check_a = QCheckBox("Attr")
         self.check_a.setToolTip("Display all attributes")
         self.check_a.setChecked(self.follow_attributes)
         self.check_a.toggled.connect(self.toggle_attributes)
         hbox.addWidget(self.check_a)
         # Option: Display Properties
-        self.check_p = QCheckBox("Properties")
+        self.check_p = QCheckBox("Props")
         self.check_p.setToolTip("Display DefinedByProperties (incl. quantities)")
         self.check_p.setChecked(self.follow_properties)
         self.check_p.toggled.connect(self.toggle_properties)
         hbox.addWidget(self.check_p)
         # Option: Display Associations
-        check_associations = QCheckBox("Associations")
+        check_associations = QCheckBox("Assoc")
         check_associations.setToolTip("Display associations, such as materials and classifications")
         check_associations.setChecked(self.follow_associations)
         check_associations.toggled.connect(self.toggle_associations)
         hbox.addWidget(check_associations)
         # Option: Display Assignments
-        check_assignments = QCheckBox("Assignments")
+        check_assignments = QCheckBox("Assign")
         check_assignments.setToolTip("Display assignments, such as control, actor, process, group")
         check_assignments.setChecked(self.follow_assignments)
         check_assignments.toggled.connect(self.toggle_assignments)
@@ -85,12 +85,15 @@ class IFCPropertyWidget(QWidget):
         hbox.addSpacerItem(spacer)
 
         # Property Tree
-        self.property_tree = QTreeWidget()
+        self.property_tree = QTreeView()  # instead of QTreeWidget
+        self.model = None
+        self.reset()
+
         vbox.addWidget(self.property_tree)
-        self.property_tree.setColumnCount(3)
-        self.property_tree.setHeaderLabels(["Name", "Value", "ID/Type"])
-        self.property_tree.itemDoubleClicked.connect(self.check_value_edit)
-        self.property_tree.itemChanged.connect(self.set_value_edit)
+        # self.property_tree.setColumnCount(3)
+        # self.property_tree.setHeaderLabels(["Name", "Value", "ID/Type"])
+        # self.property_tree.itemDoubleClicked.connect(self.check_value_edit)
+        # self.property_tree.itemChanged.connect(self.set_value_edit)
 
     def set_from_selected_items(self, items):
         """
@@ -103,10 +106,10 @@ class IFCPropertyWidget(QWidget):
         for item in items:
             # our very first item is the File, so show the Header only
             if item.text(1) == "File":
-                ifc_file = item.data(0, Qt.UserRole)
-                if ifc_file is None:
+                model = item.data(0, Qt.UserRole)
+                if model is None:
                     break
-                self.add_file_header(ifc_file)
+                self.add_file_header(model)
             else:
                 ifc_object = item.data(0, Qt.UserRole)
                 if ifc_object is None:
@@ -123,7 +126,7 @@ class IFCPropertyWidget(QWidget):
         large geometry.
 
         :param ifc_object: IfcPropertySet containing individual properties
-        :param parent_item: QTreeWidgetItem used to put attributes underneath
+        :param parent_item: QStandardItem used to put attributes underneath
         :param recursion: To avoid infinite recursion, the recursion level is checked
         """
         for att_idx in range(0, len(ifc_object)):
@@ -133,15 +136,18 @@ class IFCPropertyWidget(QWidget):
             att_type = ifc_object.attribute_type(att_name)
             if not self.show_all and (att_type == ('ENTITY INSTANCE' or 'AGGREGATE OF ENTITY INSTANCE')):
                 att_value = ''
-            attribute_item = QTreeWidgetItem([att_name, att_value, att_type])
-            attribute_item.setData(1, Qt.UserRole, ifc_object)  # remember the owner of this attribute
+            attribute_item0 = QStandardItem(att_name)
+            attribute_item1 = QStandardItem(att_value)
+            attribute_item1.setToolTip(att_value)
+            attribute_item2 = QStandardItem(att_type)
+            attribute_item1.setData(ifc_object, Qt.UserRole)  # remember the owner of this attribute
 
             if att_type == 'ENUMERATION':
                 enums = get_enums_from_object(ifc_object, att_name)
-                attribute_item.setStatusTip(1, ' - '.join(enums))
-                attribute_item.setToolTip(1, ' - '.join(enums))
+                attribute_item1.setStatusTip(' - '.join(enums))
+                attribute_item1.setToolTip(' - '.join(enums))
 
-            parent_item.addChild(attribute_item)
+            parent_item.appendRow([attribute_item0, attribute_item1, attribute_item2])
 
             # Skip?
             if not self.show_all:
@@ -152,31 +158,36 @@ class IFCPropertyWidget(QWidget):
             attribute = ifc_object[att_idx]
             if attribute is not None and recursion < 20:
                 if att_type == 'ENTITY INSTANCE':
-                    self.add_attributes_in_tree(attribute, attribute_item, recursion + 1)
+                    self.add_attributes_in_tree(attribute, attribute_item0, recursion + 1)
+                if att_type == 'AGGREGATE OF DOUBLE':
+                    attribute_item0.setText(attribute_item0.text() + ' [' + str(len(attribute)) + ']')
+                    for counter, value in enumerate(attribute):
+                        nested_item0 = QStandardItem("[" + str(counter) + "]")
+                        nested_item1 = QStandardItem(str(value))
+                        nested_item2 = QStandardItem("DOUBLE")
+                        # nested_item1.setData(nested_entity, Qt.UserRole)  # remember the owner of this attribute
+                        attribute_item0.appendRow([nested_item0, nested_item1, nested_item2])
                 if att_type == 'AGGREGATE OF ENTITY INSTANCE':
-                    counter = 0
-                    attribute_item.setText(0, attribute_item.text(0) + ' [' + str(len(attribute)) + ']')
-                    for nested_entity in attribute:
-                        my_name = "[" + str(counter) + "]"
-                        my_value = self.get_friendly_ifc_name(nested_entity)
-                        my_type = "#" + str(nested_entity.id())
-                        nested_item = QTreeWidgetItem([my_name, my_value, my_type])
-                        nested_item.setData(1, Qt.UserRole, nested_entity)  # remember the owner of this attribute
-                        attribute_item.addChild(nested_item)
+                    attribute_item0.setText(attribute_item0.text() + ' [' + str(len(attribute)) + ']')
+                    for counter, nested_entity in enumerate(attribute):
+                        nested_item0 = QStandardItem("[" + str(counter) + "]")
+                        nested_item1 = QStandardItem(self.get_friendly_ifc_name(nested_entity))
+                        nested_item2 = QStandardItem("#" + str(nested_entity.id()))
+                        nested_item1.setData(nested_entity, Qt.UserRole)  # remember the owner of this attribute
+                        attribute_item0.appendRow([nested_item0, nested_item1, nested_item2])
                         try:
-                            self.add_attributes_in_tree(nested_entity, nested_item,
+                            self.add_attributes_in_tree(nested_entity, nested_item0,
                                                         recursion + 1)  # forced high depth
                         except:
                             print('Except nested Entity Instance')
                             pass
-                        counter += 1
 
     def add_properties_in_tree(self, property_set, parent_item):
         """
         Fill the property tree with the properties of a particular property set
 
         :param property_set: IfcPropertySet containing individual properties
-        :param parent_item: QTreeWidgetItem used to put properties underneath
+        :param parent_item: QStandardItem used to put properties underneath
         """
         for prop in property_set.HasProperties:
             if self.show_all:
@@ -186,23 +197,29 @@ class IFCPropertyWidget(QWidget):
                 prop_value = '<not handled>'
                 if prop.is_a('IfcPropertySingleValue'):
                     prop_value = str(prop.NominalValue.wrappedValue)
-                    prop_item = QTreeWidgetItem([prop.Name, prop_value, unit])
-                    prop_item.setData(1, Qt.UserRole, prop)
-                    parent_item.addChild(prop_item)
+                    prop_item0 = QStandardItem(prop.Name)
+                    prop_item1 = QStandardItem(prop_value)
+                    prop_item2 = QStandardItem(unit)
+                    prop_item1.setData(prop, Qt.UserRole)
+                    parent_item.appendRow([prop_item0, prop_item1, prop_item2])
                 elif prop.is_a('IfcComplexProperty'):
-                    property_item = QTreeWidgetItem([prop.Name, '', unit])
-                    parent_item.addChild(property_item)
+                    property_item0 = QStandardItem(prop.Name)
+                    # property_item1 = QStandardItem('')
+                    property_item2 = QStandardItem(unit)
+                    parent_item.appendRow([property_item0, None, property_item2])
                     for nested_prop in prop.HasProperties:
                         nested_unit = str(nested_prop.Unit) if hasattr(nested_prop, 'Unit') else ''
-                        property_nested_item = QTreeWidgetItem(
-                            [nested_prop.Name, str(nested_prop.NominalValue.wrappedValue), nested_unit])
-                        property_nested_item.setData(1, Qt.UserRole, nested_prop)
-                        property_item.addChild(property_nested_item)
-                        # self.add_attributes_in_tree(nested_prop, property_nesteditem)
+                        prop_nested_item0 = QStandardItem(nested_prop.Name)
+                        prop_nested_item1 = QStandardItem(str(nested_prop.NominalValue.wrappedValue))
+                        prop_nested_item2 = QStandardItem(nested_unit)
+                        prop_nested_item1.setData(nested_prop, Qt.UserRole)
+                        property_item0.appendRow([prop_nested_item0, prop_nested_item1, prop_nested_item2])
                 else:
-                    property_item = QTreeWidgetItem([prop.Name, '<not handled>', unit])
-                    property_item.setData(1, Qt.UserRole, prop)
-                    parent_item.addChild(property_item)
+                    property_item0 = QStandardItem(prop.Name)
+                    property_item1 = QStandardItem('<not handled>')
+                    property_item2 = QStandardItem(unit)
+                    property_item1.setData(prop, Qt.UserRole)
+                    parent_item.appendRow([property_item0, property_item1, property_item2])
 
     def add_quantities_in_tree(self, quantity_set, parent_item):
         """
@@ -225,7 +242,11 @@ class IFCPropertyWidget(QWidget):
                     quantity_value = str(quantity.VolumeValue)
                 elif quantity.is_a('IfcQuantityCount'):
                     quantity_value = str(quantity.CountValue)
-                parent_item.addChild(QTreeWidgetItem([quantity.Name, quantity_value, unit]))
+
+                prop_item0 = QStandardItem(quantity.Name)
+                prop_item1 = QStandardItem(quantity_value)
+                prop_item2 = QStandardItem(unit)
+                parent_item.appendRow([prop_item0, prop_item1, prop_item2])
 
     def add_file_header(self, ifc_file):
         """
@@ -233,41 +254,44 @@ class IFCPropertyWidget(QWidget):
         which contains the current selected entities
         """
         self.loaded_objects_and_files.append(ifc_file)
-        header_item = QTreeWidgetItem(["Header"])
-        self.property_tree.addTopLevelItem(header_item)
+        header_item = QStandardItem("Header")
+        header_item.setData(ifc_file, Qt.UserRole)
+        self.model.invisibleRootItem().appendRow([header_item])
 
         header = ifc_file.wrapped_data.header
-        FILE_DESCRIPTION_item = QTreeWidgetItem(["FILE_DESCRIPTION", "", ""])
-        header_item.addChild(FILE_DESCRIPTION_item)
+        FILE_DESCRIPTION_item = QStandardItem("FILE_DESCRIPTION")
+        header_item.appendRow([FILE_DESCRIPTION_item])
         for desc in header.file_description.description:
             # desc = ...[...:...]"
             key = desc.split("[")[0]
             description = desc[len(key) + 1:-1]
-            tree_item = QTreeWidgetItem([key, description])
-            tree_item.setToolTip(1, description)
-            FILE_DESCRIPTION_item.addChild(tree_item)
-        FILE_DESCRIPTION_item.addChild(
-            QTreeWidgetItem(["implementation_level", str(header.file_description.implementation_level)]))
+            tree_item1 = QStandardItem(key)
+            tree_item2 = QStandardItem(description)
+            tree_item1.setToolTip(description)
+            FILE_DESCRIPTION_item.appendRow([tree_item1, tree_item2])
+        FILE_DESCRIPTION_item.appendRow(
+            [QStandardItem("implementation_level"),
+             QStandardItem(str(header.file_description.implementation_level))])
 
-        FILE_NAME_item = QTreeWidgetItem(["FILE_NAME"])
-        header_item.addChild(FILE_NAME_item)
-        FILE_NAME_item.addChild(QTreeWidgetItem(["name", str(header.file_name.name), ""]))
-        FILE_NAME_item.addChild(QTreeWidgetItem(["time_stamp", str(header.file_name.time_stamp), ""]))
+        FILE_NAME_item = QStandardItem("FILE_NAME")
+        header_item.appendRow([FILE_NAME_item])
+        FILE_NAME_item.appendRow([QStandardItem("name"), QStandardItem(str(header.file_name.name))])
+        FILE_NAME_item.appendRow([QStandardItem("time_stamp"), QStandardItem(str(header.file_name.time_stamp))])
         for author in header.file_name.author:
-            FILE_NAME_item.addChild(QTreeWidgetItem(["author", str(author)]))
+            FILE_NAME_item.appendRow([QStandardItem("author"), QStandardItem(str(author))])
         for organization in header.file_name.organization:
-            FILE_NAME_item.addChild(QTreeWidgetItem(["organization", str(organization)]))
-        FILE_NAME_item.addChild(
-            QTreeWidgetItem(["preprocessor_version", str(header.file_name.preprocessor_version)]))
-        FILE_NAME_item.addChild(
-            QTreeWidgetItem(["originating_system", str(header.file_name.originating_system)]))
-        FILE_NAME_item.addChild(QTreeWidgetItem(["authorization", str(header.file_name.authorization)]))
+            FILE_NAME_item.appendRow([QStandardItem("organization"), QStandardItem(str(organization))])
+        FILE_NAME_item.appendRow(
+            [QStandardItem("preprocessor_version"), QStandardItem(str(header.file_name.preprocessor_version))])
+        FILE_NAME_item.appendRow(
+            [QStandardItem("originating_system"), QStandardItem(str(header.file_name.originating_system))])
+        FILE_NAME_item.appendRow([QStandardItem("authorization"), QStandardItem(str(header.file_name.authorization))])
 
-        FILE_SCHEMA_item = QTreeWidgetItem(["FILE_SCHEMA", "", ""])
-        header_item.addChild(FILE_SCHEMA_item)
+        FILE_SCHEMA_item = QStandardItem("FILE_SCHEMA")
+        header_item.appendRow([FILE_SCHEMA_item])
         for schema_identifiers in header.file_schema.schema_identifiers:
-            FILE_SCHEMA_item.addChild(
-                QTreeWidgetItem(["schema_identifiers", str(schema_identifiers), ""]))
+            FILE_SCHEMA_item.appendRow(
+                [QStandardItem("schema_identifiers"), QStandardItem(str(schema_identifiers))])
 
         self.property_tree.expandAll()
 
@@ -282,9 +306,11 @@ class IFCPropertyWidget(QWidget):
         # Attributes
         if self.follow_attributes:
             my_id = ifc_object.GlobalId if hasattr(ifc_object, "GlobalId") else str("#{}").format(ifc_object.id())
-            attributes_item = QTreeWidgetItem(["Attributes", self.get_friendly_ifc_name(ifc_object), my_id])
-            self.property_tree.addTopLevelItem(attributes_item)
-            self.add_attributes_in_tree(ifc_object, attributes_item)
+            attributes_item1 = QStandardItem("Attributes")
+            attributes_item2 = QStandardItem(self.get_friendly_ifc_name(ifc_object))
+            attributes_item3 = QStandardItem(my_id)
+            self.model.invisibleRootItem().appendRow([attributes_item1, attributes_item2, attributes_item3])
+            self.add_attributes_in_tree(ifc_object, attributes_item1)
 
             # inv_attributes_item = QTreeWidgetItem(["Inverse Attributes", self.get_friendly_ifc_name(ifc_object), my_id])
             # self.property_tree.addTopLevelItem(inv_attributes_item)
@@ -293,23 +319,27 @@ class IFCPropertyWidget(QWidget):
         # Has Assignments
         if self.follow_assignments and hasattr(ifc_object, 'HasAssignments'):
             buffer = "HasAssignments [" + str(len(ifc_object.HasAssignments)) + "]"
-            assignments_item = QTreeWidgetItem([buffer, self.get_friendly_ifc_name(ifc_object)])
-            self.property_tree.addTopLevelItem(assignments_item)
+            assignments_item0 = QStandardItem(buffer)
+            assignments_item1 = QStandardItem(self.get_friendly_ifc_name(ifc_object))
+            self.model.invisibleRootItem().appendRow([assignments_item0, assignments_item1])
             counter = 0
             for assignment in ifc_object.HasAssignments:
                 ass_name = assignment.Name if assignment.Name is not None else '[' + str(counter) + ']'
-                ass_item = QTreeWidgetItem([ass_name, self.get_friendly_ifc_name(assignment), assignment.GlobalId])
-                assignments_item.addChild(ass_item)
-                self.add_attributes_in_tree(assignment, ass_item)
+                ass_item0 = QStandardItem(ass_name)
+                ass_item0.setData(assignment, Qt.UserRole)
+                ass_item1 = QStandardItem(self.get_friendly_ifc_name(assignment))
+                ass_item2 = QStandardItem(assignment.GlobalId)
+                assignments_item0.appendRow([ass_item0, ass_item1, ass_item2])
+                self.add_attributes_in_tree(assignment, ass_item0)
                 counter += 1
 
         # Defined By (for type, properties & quantities)
         # using attributes (show all)
         if self.show_all and (self.follow_defines or self.follow_properties) and hasattr(ifc_object,
                                                                                          'IsDefinedBy'):
-            buffer = "IsDefinedBy [" + str(len(ifc_object.IsDefinedBy)) + "]"
-            item = QTreeWidgetItem([buffer, self.get_friendly_ifc_name(ifc_object), ''])
-            self.property_tree.addTopLevelItem(item)
+            item0 = QStandardItem("IsDefinedBy [" + str(len(ifc_object.IsDefinedBy)) + "]")
+            item1 = QStandardItem(self.get_friendly_ifc_name(ifc_object))
+            self.model.invisibleRootItem().appendRow([item0, item1])
             counter = 0
             for definition in ifc_object.IsDefinedBy:
                 if definition.is_a('IfcRelDefinesByProperties') and not self.follow_properties:
@@ -317,10 +347,12 @@ class IFCPropertyWidget(QWidget):
                 if definition.is_a('IfcRelDefinesByType') and not self.follow_defines:
                     continue
                 def_name = definition.Name if definition.Name is not None else '[' + str(counter) + ']'
-                def_item = QTreeWidgetItem(
-                    [def_name, self.get_friendly_ifc_name(definition), definition.GlobalId])
-                item.addChild(def_item)
-                self.add_attributes_in_tree(definition, def_item)
+                def_item0 = QStandardItem(def_name)
+                def_item0.setData(definition, Qt.UserRole)
+                def_item1 = QStandardItem(self.get_friendly_ifc_name(definition))
+                def_item2 = QStandardItem(definition.GlobalId)
+                item0.appendRow([def_item0, def_item1, def_item2])
+                self.add_attributes_in_tree(definition, def_item0)
                 counter += 1
         # more streamlined display
         if not self.show_all and (self.follow_defines or self.follow_properties) and hasattr(ifc_object, 'IsDefinedBy'):
@@ -328,30 +360,36 @@ class IFCPropertyWidget(QWidget):
                 if self.follow_defines and definition.is_a('IfcRelDefinesByType'):
                     type_object = definition.RelatingType
                     s = self.get_friendly_ifc_name(type_object)
-                    type_item = QTreeWidgetItem([type_object.Name, s, type_object.GlobalId])
-                    self.property_tree.addTopLevelItem(type_item)
+                    type_item0 = QStandardItem(type_object.Name)
+                    type_item0.setData(type_item0, Qt.UserRole)
+                    type_item1 = QStandardItem(s)
+                    type_item2 = QStandardItem(type_object.GlobalId)
+                    type_item0.setData(type_object, Qt.UserRole)
+                    self.model.invisibleRootItem().appendRow([type_item0, type_item1, type_item2])
                 if self.follow_properties and definition.is_a('IfcRelDefinesByProperties'):
                     property_set = definition.RelatingPropertyDefinition
-                    s = self.get_friendly_ifc_name(property_set)
+                    prop_item0 = QStandardItem(property_set.Name)
+                    prop_item0.setData(property_set, Qt.UserRole)
+                    prop_item1 = QStandardItem(self.get_friendly_ifc_name(property_set))
+                    prop_item2 = QStandardItem(property_set.GlobalId)
+                    self.model.invisibleRootItem().appendRow([prop_item0, prop_item1, prop_item2])
                     # the individual properties/quantities
                     if property_set.is_a('IfcPropertySet'):
-                        properties_item = QTreeWidgetItem([property_set.Name, s, property_set.GlobalId])
-                        self.property_tree.addTopLevelItem(properties_item)
-                        self.add_properties_in_tree(property_set, properties_item)
+                        self.add_properties_in_tree(property_set, prop_item0)
                     elif property_set.is_a('IfcElementQuantity'):
-                        quantities_item = QTreeWidgetItem([property_set.Name, s, property_set.GlobalId])
-                        self.property_tree.addTopLevelItem(quantities_item)
-                        self.add_quantities_in_tree(property_set, quantities_item)
+                        self.add_quantities_in_tree(property_set, prop_item0)
 
         # Associations (Materials, Classification, ...)
         if self.follow_associations and hasattr(ifc_object, 'HasAssociations'):
-            associations_item = QTreeWidgetItem(
-                ["Associations [" + str(len(ifc_object.HasAssociations)) + "]"])
-            self.property_tree.addTopLevelItem(associations_item)
+            item0 = QStandardItem("Associations [" + str(len(ifc_object.HasAssociations)) + "]")
+            item1 = QStandardItem(self.get_friendly_ifc_name(ifc_object))
+            self.model.invisibleRootItem().appendRow([item0, item1])
             for association in ifc_object.HasAssociations:
-                s = self.get_friendly_ifc_name(association)
-                item = QTreeWidgetItem([association.Name, s, association.GlobalId])
-                associations_item.addChild(item)
+                def_item0 = QStandardItem(association.Name)
+                def_item0.setData(association, Qt.UserRole)
+                def_item1 = QStandardItem(self.get_friendly_ifc_name(association))
+                def_item2 = QStandardItem(association.GlobalId)
+                item0.appendRow([def_item0, def_item1, def_item2])
                 # and one step deeper
                 if association.is_a('IfcRelAssociatesMaterial'):
                     relating_material = association.RelatingMaterial
@@ -359,24 +397,28 @@ class IFCPropertyWidget(QWidget):
                     if not self.show_all:  # streamlined display
                         if relating_material.is_a('IfcMaterialList'):
                             for mat in relating_material.Materials:
-                                s = self.get_friendly_ifc_name(mat)
-                                mat_item = QTreeWidgetItem([mat.Name, s, "#" + str(mat.id())])
-                                item.addChild(mat_item)
-                                self.add_attributes_in_tree(mat, mat_item)
+                                mat_item0 = QStandardItem(mat.Name)
+                                mat_item0.setData(mat, Qt.UserRole)
+                                mat_item1 = QStandardItem(self.get_friendly_ifc_name(mat))
+                                mat_item2 = QStandardItem(str('#' + mat.id()))
+                                def_item0.appendRow([mat_item0, mat_item1, mat_item2])
+                                self.add_attributes_in_tree(mat, mat_item0)
                         elif relating_material.is_a('IfcMaterialLayerSet'):
                             # self.add_attributes_in_tree(relating_material, item)
                             for layer in relating_material.MaterialLayers:
-                                s = self.get_friendly_ifc_name(layer)
-                                layer_item = QTreeWidgetItem(["<no name>", s, "#" + str(layer.id())])
-                                item.addChild(layer_item)
-                                self.add_attributes_in_tree(layer, layer_item)
+                                mat_item0 = QStandardItem(layer.Name)
+                                mat_item0.setData(layer, Qt.UserRole)
+                                mat_item1 = QStandardItem(self.get_friendly_ifc_name(layer))
+                                mat_item2 = QStandardItem(str('#' + layer.id()))
+                                def_item0.appendRow([mat_item0, mat_item1, mat_item2])
+                                self.add_attributes_in_tree(layer, mat_item0)
                         else:
-                            self.add_attributes_in_tree(relating_material, item)
+                            self.add_attributes_in_tree(relating_material, def_item0)
                     else:  # generic attributes following
-                        self.add_attributes_in_tree(relating_material, item)
+                        self.add_attributes_in_tree(relating_material, def_item0)
                 elif association.is_a('IfcRelAssociatesClassification'):
                     relating_classification = association.RelatingClassification
-                    self.add_attributes_in_tree(relating_classification, item)
+                    self.add_attributes_in_tree(relating_classification, def_item0)
 
         self.property_tree.expandAll()
 
@@ -392,13 +434,27 @@ class IFCPropertyWidget(QWidget):
     # Configuring the tree
 
     def reset(self):
-        self.property_tree.clear()
+        w0 = 200
+        w1 = 200
+        w2 = 50
+        if self.model is not None:
+            w0 = self.property_tree.columnWidth(0)
+            w1 = self.property_tree.columnWidth(1)
+            w2 = self.property_tree.columnWidth(2)
+            self.model.clear()
+        self.model = QStandardItemModel(0, 3, self)
+        self.property_tree.setModel(self.model)
+        self.property_tree.setColumnWidth(0, w0)
+        self.property_tree.setColumnWidth(1, w1)
+        self.property_tree.setColumnWidth(2, w2)
+        self.model.setHeaderData(0, Qt.Horizontal, "Name")
+        self.model.setHeaderData(1, Qt.Horizontal, "Value")
+        self.model.setHeaderData(2, Qt.Horizontal, "ID/Type")
         self.loaded_objects_and_files.clear()
 
     def regenerate(self):
-        self.property_tree.clear()
         buffer_list = self.loaded_objects_and_files[:]  # copy items in new list
-        self.loaded_objects_and_files.clear()
+        self.reset()
         for item in buffer_list:
             # if file
             if hasattr(item, "id"):
@@ -545,6 +601,7 @@ def get_enums_from_object(ifc_object, att_name):
             attribute = e_class.attribute_by_index(att_index)
             return attribute.type_of_attribute().declared_type().enumeration_items()
 
+
 class ItemDelegate(QItemDelegate):
     def __init__(self, parent):
         super(ItemDelegate, self).__init__(parent)
@@ -554,6 +611,24 @@ class ItemDelegate(QItemDelegate):
 
     def updateEditorGeometry(self, editor, option, index):
         editor.move(QCursor.pos())
+
+
+class QCustomDelegate(QItemDelegate):
+    def paint(self, painterQPainter, optionQStyleOptionViewItem, indexQModelIndex):
+        column = indexQModelIndex.column()
+        if column == 3:
+            painterQPainter.fillRect(optionQStyleOptionViewItem.rect, QColor(191, 222, 185))
+            # currentQAbstractItemModel = indexQModelIndex.model()
+            # iconQModelIndex           = currentQAbstractItemModel.index(indexQModelIndex.row(), 1, indexQModelIndex.parent())
+            # pathQString               = currentQAbstractItemModel.data(iconQModelIndex, Qt.EditRole).toString()
+            # iconQPixmap               = QPixmap(pathQString)
+            # if not iconQPixmap.isNull():
+            #     painterQPainter.drawPixmap (
+            #         optionQStyleOptionViewItem.rect.x(),
+            #         optionQStyleOptionViewItem.rect.y(),
+            #         iconQPixmap.scaled(20, 20, Qt.KeepAspectRatio))
+        else:
+            QItemDelegate.paint(self, painterQPainter, optionQStyleOptionViewItem, indexQModelIndex)
 
 
 if __name__ == '__main__':
