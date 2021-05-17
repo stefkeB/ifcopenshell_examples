@@ -2,6 +2,8 @@ import sys
 import os.path
 import re
 
+import PyQt5.QtCore
+
 try:
     from PyQt5.QtCore import *
     from PyQt5.QtGui import *
@@ -85,15 +87,16 @@ class IFCPropertyWidget(QWidget):
         hbox.addSpacerItem(spacer)
 
         # Property Tree
-        self.property_tree = QTreeView()  # instead of QTreeWidget
+        self.property_tree = QTreeView()
+        delegate = QCustomDelegate(self)
+        delegate.send_update_object.connect(self.send_update_object)  # to warn name changes
+        self.property_tree.setItemDelegate(delegate)
+        # self.property_tree.setEditTriggers(QAbstractItemView.CurrentChanged)  # open editor upon first click
+        # self.property_tree.setEditTriggers(QAbstractItemView.NoEditTriggers)  # Not editable tree
+        # self.property_tree.setItemDelegateForColumn(1, QCustomDelegate(self))
         self.model = None
         self.reset()
-
         vbox.addWidget(self.property_tree)
-        # self.property_tree.setColumnCount(3)
-        # self.property_tree.setHeaderLabels(["Name", "Value", "ID/Type"])
-        # self.property_tree.itemDoubleClicked.connect(self.check_value_edit)
-        # self.property_tree.itemChanged.connect(self.set_value_edit)
 
     def set_from_selected_items(self, items):
         """
@@ -141,7 +144,8 @@ class IFCPropertyWidget(QWidget):
             attribute_item1.setToolTip(att_value)
             attribute_item2 = QStandardItem(att_type)
             attribute_item1.setData(ifc_object, Qt.UserRole)  # remember the owner of this attribute
-
+            if att_type in ['STRING', 'DOUBLE', 'INT', 'ENUMERATION']:
+                attribute_item1.setEditable(True)
             if att_type == 'ENUMERATION':
                 enums = get_enums_from_object(ifc_object, att_name)
                 attribute_item1.setStatusTip(' - '.join(enums))
@@ -477,113 +481,23 @@ class IFCPropertyWidget(QWidget):
         self.show_all = not self.show_all
         self.regenerate()
 
-    # Tree Editing
-
-    def set_value_edit(self, item, column):
-        """
-        Send the change back to the item
-
-        :param item: QTreeWidgetItem
-        :param int column: Column index
-        :return:
-        """
-        if column == 1 and item.text(2) in ['STRING', 'DOUBLE', 'ENUMERATION', 'INT']:
-            att_name = item.text(0)
-            att_new_value = item.text(1)
-            # if item.text(2) == 'ENUMERATION':
-            #    att_old_value = item.data(1, Qt.UserRole + 1)
-            #    combo = self.combo
-            #    att_new_value = self.combo.currentText()
-            #    # self.combo.setParent(None)
-            #    # self.combo = None
-            ifc_object = item.data(1, Qt.UserRole)
-            if ifc_object is not None:
-                att_index = ifc_object.wrapped_data.get_argument_index(att_name)
-                att_value = ifc_object.wrapped_data.get_argument(att_index)
-                # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
-                att_type = ifc_object.attribute_type(att_index)
-
-                print("Attribute", att_index, "current:", att_value, "new:", att_new_value)
-                if att_value != att_new_value and hasattr(ifc_object, att_name):
-                    try:
-                        val = att_new_value  # default as STRING
-                        if att_type == 'INT':
-                            val = int(att_new_value)
-                            setattr(ifc_object, item.text(0), val)
-                        if att_type == 'DOUBLE':
-                            val = float(att_new_value)
-                            setattr(ifc_object, item.text(0), val)
-                        if att_type == 'ENUMERATION':
-                            schema = ifcopenshell.ifcopenshell_wrapper.schema_by_name('IFC2x3')
-                            e_class = schema.declaration_by_name(ifc_object.is_a())
-                            attribute = e_class.attribute_by_index(att_index)
-                            enum = attribute.type_of_attribute().declared_type().enumeration_items()
-                            if val in enum:
-                                print('Valid enum value')
-                                setattr(ifc_object, item.text(0), val)
-                            else:
-                                print('Invalid enum value')
-                                item.setText(1, str(att_value))
-                        if att_type == 'STRING':
-                            setattr(ifc_object, item.text(0), att_value)
-                    except:
-                        print("Could not set Attribute :", item.text(0), " with value ", att_new_value)
-                        print("So we reset it to ", att_value)
-                        item.setText(1, str(att_value))
-                        pass
-                    # Warn other views, but only needed if Name is changed
-                    if att_name == "Name":
-                        self.send_update_object.emit(ifc_object)
-
-    def check_value_edit(self, item, column):
-        """
-        Check whether this item can be edited
-
-        :param item: QTreeWidgetItem
-        :param column: Column index
-        :return:
-        """
-        if item.text(0) == 'GlobalId': return  # We don't want to allow changing this
-        ifc_object = item.data(1, Qt.UserRole)
-        if ifc_object is not None:
-            if column == 1 and item.text(2) in ['STRING', 'DOUBLE', 'ENUMERATION', 'INT']:
-                tmp = item.flags()
-                if column == 1:
-                    item.setFlags(tmp | Qt.ItemIsEditable)
-                    # Get my index
-                    #if item.text(2) == 'ENUMERATION':
-                    #    tree = item.treeWidget()
-                    #    index = tree.indexFromItem(item, 1)
-                    #    enums = get_enums_from_object(ifc_object, item.text(0))
-
-                        # Insert a ComboBox
-                        # self.combo = QComboBox()
-                        # self.combo.addItems(enums)
-                        # self.combo.setCurrentText(item.text(1))
-                        # item.setData(1, Qt.UserRole + 1, item.text(1))  # current value
-                        # # item.setData(1, Qt.UserRole + 2, self.combo)  # the combo box
-                        # # item.setText(1, '')
-                        # tree.setIndexWidget(index, self.combo)
-                        # self.combo.activated.connect(tree.itemChanged)
-
-
-                elif tmp & Qt.ItemIsEditable:
-                    item.setFlags(tmp ^ Qt.ItemIsEditable)
-
-
-class PopupView(QWidget):
-    def __init__(self, parent=None):
-        super(PopupView, self).__init__(parent)
-        self.setWindowFlags(Qt.Popup)
-
 
 def get_enums_from_object(ifc_object, att_name):
     """
-    Only works for IFC2X3 at the moment
+    Check the schema to get the list of enumerations
+    for one particular attribute of a class.
+
+    As we don't know the schema from the object (or do we?)
+    we try both the IFC2x3 and IFC4 schemes.
+
+    :param ifc_object: instance of an IFC object
+    :type ifc_object: entity_instance
+    :param att_name: name of the attribute
+    :type att_name: str
     """
     if hasattr(ifc_object, att_name):
         att_index = ifc_object.wrapped_data.get_argument_index(att_name)
-        att_value = ifc_object.wrapped_data.get_argument(att_index)
+        # att_value = ifc_object.wrapped_data.get_argument(att_index)
         # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
         att_type = ifc_object.attribute_type(att_index)
         if att_type == 'ENUMERATION':
@@ -614,33 +528,129 @@ def get_friendly_ifc_name(ifc_object):
     return s
 
 
-class ItemDelegate(QItemDelegate):
-    def __init__(self, parent):
-        super(ItemDelegate, self).__init__(parent)
+class QCustomDelegate(QItemDelegate):
+    # https://stackoverflow.com/questions/41207485/how-to-create-combo-box-qitemdelegate
+    # https://stackoverflow.com/questions/18068439/pyqt-simplest-working-example-of-a-combobox-inside-qtableview
 
-    def createEditor(self, parent, option, index):
-        return PopupView(parent)
+    send_update_object = pyqtSignal(object)
+
+    def __init__(self, parent):
+        QItemDelegate.__init__(self, parent)
+
+    def createEditor(self, widget, option, index):
+        """
+        Create a Combobox for enumerations
+        Create a LineEdit for strings and double
+        Create a Spinbox for integers
+        But do nothing for other data types
+        """
+        model = index.model()
+        row = index.row()
+        column = index.column()
+        parent = index.parent()
+        if column == 1:
+            text0 = model.index(row, 0, parent).data(Qt.DisplayRole)
+            text1 = index.data(Qt.DisplayRole)
+            text2 = model.index(row, 2, parent).data(Qt.DisplayRole)
+            ifc_object = index.data(Qt.UserRole)
+            if ifc_object is not None and text1 != 'GlobalId':
+                if text2 == 'ENUMERATION':
+                    enums = get_enums_from_object(ifc_object, text0)
+                    combo = QComboBox(widget)
+                    combo.setAutoFillBackground(True)
+                    combo.addItems(enums)
+                    combo.setCurrentText(text1)
+                    return combo
+                if text2 in ['INT']:
+                    spin = QSpinBox(widget)
+                    spin.setValue(int(text1))
+                    return spin
+                if text2 in ['DOUBLE', 'STRING']:
+                    return QItemDelegate.createEditor(self, widget, option, index)  # default = QLineEdit
+                else:
+                    return None
+                    # return QItemDelegate.createEditor(self, widget, option, index)  # default
+        return None
+
+    def setModelData(self, editor, model, index):
+        """This is the data stored into the field"""
+        if isinstance(editor, QComboBox):
+            model.setData(index, editor.itemText(editor.currentIndex()))
+        if isinstance(editor, QLineEdit):
+            model.setData(index, editor.text())
+        if isinstance(editor, QSpinBox):
+            model.setData(index, editor.value())
+        if isinstance(editor, QCheckBox):
+            model.setData(index, editor.isChecked())
+
+        row = index.row()
+        column = index.column()
+        parent = index.parent()
+        if column == 1:
+            text0 = model.index(row, 0, parent).data(Qt.DisplayRole)
+            text1 = index.data(Qt.DisplayRole)
+            text2 = model.index(row, 2, parent).data(Qt.DisplayRole)
+            ifc_object = index.data(Qt.UserRole)
+            if ifc_object is not None:
+                att_name = text0
+                att_index = ifc_object.wrapped_data.get_argument_index(att_name)
+                att_value = ifc_object.wrapped_data.get_argument(att_index)
+                # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
+                att_type = ifc_object.attribute_type(att_index)
+                att_new_value = text1
+
+                print("Attribute", att_index, "current:", att_value, "new:", att_new_value)
+                if att_value != att_new_value and hasattr(ifc_object, att_name):
+                    try:
+                        if att_type == 'INT':
+                            setattr(ifc_object, att_name, int(att_new_value))
+                        if att_type == 'DOUBLE':
+                            setattr(ifc_object, att_name, float(att_new_value))
+                        if att_type == 'ENUMERATION':
+                            enum = get_enums_from_object(ifc_object, att_name)
+                            if att_new_value in enum:
+                                print('Valid enum value')
+                                setattr(ifc_object, att_name, att_new_value)
+                            else:
+                                print('Invalid enum value')
+                                model.setData(index, str(att_value))
+                        if att_type == 'STRING':
+                            setattr(ifc_object, att_name, att_new_value)
+                    except:
+                        print("Could not set Attribute :", att_name, " with value ", att_new_value)
+                        print("So we reset it to ", att_value)
+                        model.setData(index, str(att_value))
+                        pass
+                    # Warn other views, but only needed if Name is changed
+                    if att_name == "Name":
+                        self.send_update_object.emit(ifc_object)
+                        pass
+
+        else:
+            QItemDelegate.setModelData(self, editor, model, index)
 
     def updateEditorGeometry(self, editor, option, index):
-        editor.move(QCursor.pos())
+        editor.setGeometry(option.rect)
 
+    def paint(self, painter, styleoptions, index):
+        """
+        Add a greenish background color to indicate editable cells
+        """
+        model = index.model()
+        row = index.row()
+        column = index.column()
+        parent = index.parent()
+        if column == 1:
+            text0 = model.index(row, 0, parent).data(Qt.DisplayRole)
+            text2 = model.index(row, 2, parent).data(Qt.DisplayRole)
+            ifc_object = index.data(Qt.UserRole)
+            if ifc_object is not None:
+                if text0 != 'GlobalId' and text2 in ['STRING', 'DOUBLE', 'ENUMERATION', 'INT']:
+                    # add a greenish background color to indicate editable cells
+                    painter.fillRect(styleoptions.rect, QColor(191, 222, 185, 20))
 
-class QCustomDelegate(QItemDelegate):
-    def paint(self, painterQPainter, optionQStyleOptionViewItem, indexQModelIndex):
-        column = indexQModelIndex.column()
-        if column == 3:
-            painterQPainter.fillRect(optionQStyleOptionViewItem.rect, QColor(191, 222, 185))
-            # currentQAbstractItemModel = indexQModelIndex.model()
-            # iconQModelIndex           = currentQAbstractItemModel.index(indexQModelIndex.row(), 1, indexQModelIndex.parent())
-            # pathQString               = currentQAbstractItemModel.data(iconQModelIndex, Qt.EditRole).toString()
-            # iconQPixmap               = QPixmap(pathQString)
-            # if not iconQPixmap.isNull():
-            #     painterQPainter.drawPixmap (
-            #         optionQStyleOptionViewItem.rect.x(),
-            #         optionQStyleOptionViewItem.rect.y(),
-            #         iconQPixmap.scaled(20, 20, Qt.KeepAspectRatio))
-        else:
-            QItemDelegate.paint(self, painterQPainter, optionQStyleOptionViewItem, indexQModelIndex)
+        # But also do the regular paint
+        QItemDelegate.paint(self, painter, styleoptions, index)
 
 
 if __name__ == '__main__':
