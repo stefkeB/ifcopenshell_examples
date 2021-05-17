@@ -177,6 +177,7 @@ class IFCQt3dView(QWidget):
             for e in f.children():
                 if e.objectName() == object_id:
                     self.selected.append(e)
+                    self.highlight_in_scene_graph(e)
                     # Switch the Material from our Mesh Child
                     for c in e.children():
                         if c.property("IsTransparent") is True:
@@ -193,6 +194,7 @@ class IFCQt3dView(QWidget):
         for f in self.files.children():
             for e in f.children():
                 if e.objectName() == object_id:
+                    self.highlight_in_scene_graph(e, False)
                     if e in self.selected:
                         self.selected.remove(e)
                     # Switch the Material from our Mesh Child
@@ -212,6 +214,7 @@ class IFCQt3dView(QWidget):
             self.selected.remove(entity)
             # Switch the Material from our Mesh Child
             for c in entity.children():
+                self.highlight_in_scene_graph(entity, False)
                 c.removeComponent(self.mat_highlight)
                 if c.property("IsTransparent") is True:
                     c.addComponent(self.transparent)
@@ -219,6 +222,7 @@ class IFCQt3dView(QWidget):
                     c.addComponent(self.material)
         else:
             self.selected.append(entity)
+            self.highlight_in_scene_graph(entity)
             # Switch the Material from our Mesh Child
             for c in entity.children():
                 if c.property("IsTransparent") is True:
@@ -239,6 +243,7 @@ class IFCQt3dView(QWidget):
                     else:
                         c.addComponent(self.material)
                 self.remove_from_selected_entities.emit(e.objectName())
+                self.highlight_in_scene_graph(e, False)
         self.selected.clear()
         self.selected.append(entity)
         # Switch the Material from our Mesh Child
@@ -250,6 +255,7 @@ class IFCQt3dView(QWidget):
             c.addComponent(self.mat_highlight)
         self.add_to_selected_entities.emit(entity.objectName())
 
+        self.highlight_in_scene_graph(entity)
         # self.update_scene_graph_tree()
         # self.scene_graph.expandToDepth(1)
 
@@ -414,8 +420,24 @@ class IFCQt3dView(QWidget):
                         # if entity.isEnabled():
                         #    entity.setEnabled(False)
 
+    def highlight_in_scene_graph(self, entity, highlight=True):
+        """
+        Highlight the entity in the scene graph
+
+        :type entity: QEntity
+        :type highlight: bool
+        """
+        iterator = QTreeWidgetItemIterator(self.scene_graph)
+        while iterator.value():
+            item = iterator.value()
+            qentity = item.data(0, Qt.UserRole)
+            if entity == qentity:
+                item.setSelected(highlight)
+                self.scene_graph.scrollToItem(item)
+            iterator += 1
+
     def update_scene_graph_tree(self, node=None, parent=None):
-        '''
+        """
         Recursive update of the tree representing the 3D scene graph.
         This only takes the scene_graph itself into account.
         The TreeItems carry a reference to the QEntity node.
@@ -424,8 +446,10 @@ class IFCQt3dView(QWidget):
         get a check box to toggle the visibility of the QEntity.
 
         :param node: current QEntity
+        :type node: QEntity
         :param parent: parent QTreeWidgetItem
-        '''
+        :type parent: QTreeWidgetItem
+        """
         if node is None:
             node = self.root
         if parent is None:

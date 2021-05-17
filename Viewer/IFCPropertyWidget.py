@@ -404,7 +404,7 @@ class IFCPropertyWidget(QWidget):
                                 mat_item0 = QStandardItem(mat.Name)
                                 mat_item0.setData(mat, Qt.UserRole)
                                 mat_item1 = QStandardItem(get_friendly_ifc_name(mat))
-                                mat_item2 = QStandardItem(str('#' + mat.id()))
+                                mat_item2 = QStandardItem(str('#' + str(mat.id())))
                                 def_item0.appendRow([mat_item0, mat_item1, mat_item2])
                                 self.add_attributes_in_tree(mat, mat_item0)
                         elif relating_material.is_a('IfcMaterialLayerSet'):
@@ -413,7 +413,7 @@ class IFCPropertyWidget(QWidget):
                                 mat_item0 = QStandardItem(layer.Name)
                                 mat_item0.setData(layer, Qt.UserRole)
                                 mat_item1 = QStandardItem(get_friendly_ifc_name(layer))
-                                mat_item2 = QStandardItem(str('#' + layer.id()))
+                                mat_item2 = QStandardItem(str('#' + str(layer.id())))
                                 def_item0.appendRow([mat_item0, mat_item1, mat_item2])
                                 self.add_attributes_in_tree(layer, mat_item0)
                         else:
