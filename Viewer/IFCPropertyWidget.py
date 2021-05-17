@@ -2,8 +2,6 @@ import sys
 import os.path
 import re
 
-import PyQt5.QtCore
-
 try:
     from PyQt5.QtCore import *
     from PyQt5.QtGui import *
@@ -25,6 +23,7 @@ class IFCPropertyWidget(QWidget):
     - V2 = Configurable display options (Properties, Associations, Attributes + Full detail)
     - V3 = Refining, add Assignments
     - V4 = Editing Attributes (STRING, DOUBLE, INT and ENUMERATION)
+    - V5 = QTreeWidget replaced with QTreeView
     """
 
     send_update_object = pyqtSignal(object)

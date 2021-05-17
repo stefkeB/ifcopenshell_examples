@@ -58,6 +58,7 @@ class IFCQt3dView(QWidget):
     - V3 = Draw Origin Axes & Grid
     - V4 = Object Picking & Selection Syncing (+ reorganise scenegraph)
     - V5 = Working with multiple files (+ reorganise scenegraph again)
+    - V6 = Revised Wireframe setup, improved highlights, select also in scenegraph
     """
 
     # Two signals to extend or shrink the selection
@@ -116,10 +117,6 @@ class IFCQt3dView(QWidget):
         self.transparent.setDiffuse(QColor(230, 230, 250, 150))
         self.scene.addComponent(self.transparent)
 
-        self.wireframe = QEntity()
-        self.wireframe.setObjectName("Wireframe")
-        self.wireframe.setProperty("IsProduct", True)
-        self.wireframe.setParent(self.root)
         self.edge_material = QDiffuseSpecularMaterial()
         self.edge_material.setObjectName("Shared Lines Material")
         self.edge_material.setShareable(True)
@@ -177,16 +174,7 @@ class IFCQt3dView(QWidget):
             for e in f.children():
                 if e.objectName() == object_id:
                     self.selected.append(e)
-                    self.highlight_in_scene_graph(e)
-                    # Switch the Material from our Mesh Child
-                    for c in e.children():
-                        if c.property("IsTransparent") is True:
-                            c.removeComponent(self.transparent)
-                        else:
-                            c.removeComponent(self.material)
-                        c.addComponent(self.mat_highlight)
-                    # self.update_scene_graph_tree()
-                    # self.scene_graph.expandToDepth(1)
+                    self.set_highlight(e)
                     return
 
     def deselect_object_by_id(self, object_id):
@@ -194,70 +182,60 @@ class IFCQt3dView(QWidget):
         for f in self.files.children():
             for e in f.children():
                 if e.objectName() == object_id:
-                    self.highlight_in_scene_graph(e, False)
+                    self.set_highlight(e, False)
                     if e in self.selected:
                         self.selected.remove(e)
-                    # Switch the Material from our Mesh Child
-                    for c in e.children():
-                        c.removeComponent(self.mat_highlight)
-                        if c.property("IsTransparent") is True:
-                            c.addComponent(self.transparent)
-                        else:
-                            c.addComponent(self.material)
-                    # self.update_scene_graph_tree()
-                    # self.scene_graph.expandToDepth(1)
                     return
 
     def toggle_entity(self, entity):
         print("IFCQt3dView.toggle_entity ", entity.objectName())
         if entity in self.selected:
             self.selected.remove(entity)
-            # Switch the Material from our Mesh Child
+            self.set_highlight(entity, False)
+        else:
+            self.selected.append(entity)
+            self.set_highlight(entity)
+
+    def set_highlight(self, entity, on=True):
+        """
+        Set the given QEntity to the highlight material
+
+        :param entity: the geometry to highlight
+        :type entity: QEntity
+        :param on: True = set highlight, False = remove
+        :param on: bool
+        """
+        # Switch the Material from our Mesh Child
+        if on is False:
             for c in entity.children():
-                self.highlight_in_scene_graph(entity, False)
                 c.removeComponent(self.mat_highlight)
                 if c.property("IsTransparent") is True:
                     c.addComponent(self.transparent)
                 else:
                     c.addComponent(self.material)
+            self.highlight_in_scene_graph(entity, False)
         else:
-            self.selected.append(entity)
-            self.highlight_in_scene_graph(entity)
-            # Switch the Material from our Mesh Child
             for c in entity.children():
                 if c.property("IsTransparent") is True:
                     c.removeComponent(self.transparent)
                 else:
                     c.removeComponent(self.material)
-                c.addComponent(self.mat_highlight)
+                if c.property("IsWireframe") is True:
+                    c.addComponent(self.material)
+                else:
+                    c.addComponent(self.mat_highlight)
+            self.highlight_in_scene_graph(entity)
 
     def select_exclusive_entity(self, entity):
         print("IFCQt3dView.select_exclusive_entity ", entity)
         for e in self.selected:
             if e is not entity:
-                # Switch the Material from our Mesh Child
-                for c in e.children():
-                    c.removeComponent(self.mat_highlight)
-                    if c.property("IsTransparent") is True:
-                        c.addComponent(self.transparent)
-                    else:
-                        c.addComponent(self.material)
+                self.set_highlight(e, False)
                 self.remove_from_selected_entities.emit(e.objectName())
-                self.highlight_in_scene_graph(e, False)
         self.selected.clear()
         self.selected.append(entity)
-        # Switch the Material from our Mesh Child
-        for c in entity.children():
-            if c.property("IsTransparent") is True:
-                c.removeComponent(self.transparent)
-            else:
-                c.removeComponent(self.material)
-            c.addComponent(self.mat_highlight)
+        self.set_highlight(entity)
         self.add_to_selected_entities.emit(entity.objectName())
-
-        self.highlight_in_scene_graph(entity)
-        # self.update_scene_graph_tree()
-        # self.scene_graph.expandToDepth(1)
 
     def pick(self, e: QPickTriangleEvent):
         # intersection = e.localIntersection()
@@ -409,7 +387,6 @@ class IFCQt3dView(QWidget):
                 if entity.property("IsProduct") is True:
                     # TODO: this is the opposite of what we expect...
                     entity.setEnabled(not entity.isEnabled())
-
                     # set visibility to reflect the check state
                     if tree_item.checkState(0) == Qt.Checked:
                         # if not entity.isEnabled():
@@ -729,8 +706,9 @@ class IFCQt3dView(QWidget):
             custom_line_renderer.setFirstInstance(0)
 
             # add everything to the scene
-            custom_line_entity = QEntity(self.wireframe)  # TODO: rethink scenegraph
+            custom_line_entity = QEntity(custom_mesh_entity)  # TODO: rethink scenegraph
             custom_line_entity.setObjectName("Line")
+            custom_line_entity.setProperty("IsWireframe", True)
             transform = QTransform()
             transform.setObjectName("Rotate X -90°")
             transform.setRotationX(-90)
