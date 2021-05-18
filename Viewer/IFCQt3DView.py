@@ -312,8 +312,6 @@ class IFCQt3dView(QWidget):
     def close_files(self):
         for child in self.files.children():
             child.setParent(None)
-        for wire in self.wireframe.children():
-            wire.setParent(None)
         self.update_scene_graph_tree()
         self.model_nodes.clear()
         self.selected.clear()

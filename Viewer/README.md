@@ -7,7 +7,7 @@ This class is responsible for file loading and linking the widgets together usin
 
 You can also save all files (e.g., after you edited some values). Beware that this overwrites the current files.
 
-![viewer](images/QIFCViewer_04.png)
+![viewer](images/QIFCViewer_05.png)
 
 ## IFCQt3DView.py
 
