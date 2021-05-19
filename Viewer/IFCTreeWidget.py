@@ -273,7 +273,7 @@ class IFCTreeWidget(QWidget):
         self.root_class_chooser.clear()
         for _, file in self.ifc_files.items():
             for t in file.wrapped_data.types():
-                if self.root_class_chooser.findText(t, Qt.MatchContains) == -1:
+                if self.root_class_chooser.findText(t, Qt.MatchFixedString) == -1:  # require exact matching!
                     self.root_class_chooser.addItem(t)
 
         # Add all available classes in the Combobox
