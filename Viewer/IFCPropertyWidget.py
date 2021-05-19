@@ -28,6 +28,8 @@ class IFCPropertyWidget(QWidget):
 
     send_update_object = pyqtSignal(object)
 
+    # region Initialisation
+
     def __init__(self):
         QWidget.__init__(self)
         # The list of the currently loaded objects
@@ -97,6 +99,10 @@ class IFCPropertyWidget(QWidget):
         self.reset()
         vbox.addWidget(self.property_tree)
 
+    # endregion
+
+    # region SelectionMethods
+
     def set_from_selected_items(self, items):
         """
         Fill the Property Tree from a selection of QTreeWidgetItems.
@@ -118,7 +124,9 @@ class IFCPropertyWidget(QWidget):
                     break
                 self.add_object_data(ifc_object)
 
-    # Filling the tree with information
+    # endregion
+
+    # region InformationFilling
 
     def add_attributes_in_tree(self, ifc_object, parent_item, recursion=0):
         """
@@ -311,8 +319,7 @@ class IFCPropertyWidget(QWidget):
             my_id = ifc_object.GlobalId if hasattr(ifc_object, "GlobalId") else str("#{}").format(ifc_object.id())
             attributes_item1 = QStandardItem("Attributes")
             attributes_item2 = QStandardItem(get_friendly_ifc_name(ifc_object))
-            attributes_item3 = QStandardItem(my_id)
-            self.model.invisibleRootItem().appendRow([attributes_item1, attributes_item2, attributes_item3])
+            self.model.invisibleRootItem().appendRow([attributes_item1, attributes_item2])
             self.add_attributes_in_tree(ifc_object, attributes_item1)
 
             # inv_attributes_item = QTreeWidgetItem(["Inverse Attributes", get_friendly_ifc_name(ifc_object), my_id])
@@ -359,6 +366,10 @@ class IFCPropertyWidget(QWidget):
                 counter += 1
         # more streamlined display
         if not self.show_all and (self.follow_defines or self.follow_properties) and hasattr(ifc_object, 'IsDefinedBy'):
+            buffer = "IsDefinedBy [" + str(len(ifc_object.IsDefinedBy)) + "]"
+            defines_item0 = QStandardItem(buffer)
+            defines_item1 = QStandardItem(get_friendly_ifc_name(ifc_object))
+            self.model.invisibleRootItem().appendRow([defines_item0, defines_item1])
             for definition in ifc_object.IsDefinedBy:
                 if self.follow_defines and definition.is_a('IfcRelDefinesByType'):
                     type_object = definition.RelatingType
@@ -368,14 +379,14 @@ class IFCPropertyWidget(QWidget):
                     type_item1 = QStandardItem(s)
                     type_item2 = QStandardItem(type_object.GlobalId)
                     type_item0.setData(type_object, Qt.UserRole)
-                    self.model.invisibleRootItem().appendRow([type_item0, type_item1, type_item2])
+                    defines_item0.appendRow([type_item0, type_item1, type_item2])
                 if self.follow_properties and definition.is_a('IfcRelDefinesByProperties'):
                     property_set = definition.RelatingPropertyDefinition
                     prop_item0 = QStandardItem(property_set.Name)
                     prop_item0.setData(property_set, Qt.UserRole)
                     prop_item1 = QStandardItem(get_friendly_ifc_name(property_set))
                     prop_item2 = QStandardItem(property_set.GlobalId)
-                    self.model.invisibleRootItem().appendRow([prop_item0, prop_item1, prop_item2])
+                    defines_item0.appendRow([prop_item0, prop_item1, prop_item2])
                     # the individual properties/quantities
                     if property_set.is_a('IfcPropertySet'):
                         self.add_properties_in_tree(property_set, prop_item0)
@@ -426,7 +437,9 @@ class IFCPropertyWidget(QWidget):
 
         self.property_tree.expandAll()
 
-    # Configuring the tree
+    # endregion
+
+    # region Configuring the tree
 
     def reset(self):
         w0 = 200
@@ -481,6 +494,10 @@ class IFCPropertyWidget(QWidget):
         self.show_all = not self.show_all
         self.regenerate()
 
+    # endregion
+
+
+# region Separate Methods
 
 def get_enums_from_object(ifc_object, att_name):
     """
@@ -527,6 +544,10 @@ def get_friendly_ifc_name(ifc_object):
     s = s[4:]
     return s
 
+# endregion
+
+# region Delegates & Editing
+
 
 class QCustomDelegate(QItemDelegate):
     # https://stackoverflow.com/questions/41207485/how-to-create-combo-box-qitemdelegate
@@ -542,6 +563,7 @@ class QCustomDelegate(QItemDelegate):
         Create a Combobox for enumerations
         Create a LineEdit for strings and double
         Create a Spinbox for integers
+        Create a Checkbox for Bool
         But do nothing for other data types
         """
         model = index.model()
@@ -565,9 +587,19 @@ class QCustomDelegate(QItemDelegate):
                     spin = QSpinBox(widget)
                     spin.setValue(int(text1))
                     return spin
+                if text2 in ['BOOL']:
+                    check = QCheckBox(widget)
+                    check.setText(text0)
+                    check.setAutoFillBackground(True)
+                    check.setChecked(bool(text1))
+                    return check
                 if text2 in ['DOUBLE', 'STRING']:
                     return QItemDelegate.createEditor(self, widget, option, index)  # default = QLineEdit
                 else:
+                    # Check Properties (even if we don't know the unit...)
+                    if ifc_object.is_a('IfcPropertySingleValue'):
+                        return QItemDelegate.createEditor(self, widget, option, index)  # default
+
                     return None
                     # return QItemDelegate.createEditor(self, widget, option, index)  # default
         return None
@@ -589,42 +621,80 @@ class QCustomDelegate(QItemDelegate):
         if column == 1:
             text0 = model.index(row, 0, parent).data(Qt.DisplayRole)
             text1 = index.data(Qt.DisplayRole)
+            parenttext = model.index(row, 1, parent).data(Qt.DisplayRole)
             text2 = model.index(row, 2, parent).data(Qt.DisplayRole)
             ifc_object = index.data(Qt.UserRole)
             if ifc_object is not None:
-                att_name = text0
-                att_index = ifc_object.wrapped_data.get_argument_index(att_name)
-                att_value = ifc_object.wrapped_data.get_argument(att_index)
-                # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
-                att_type = ifc_object.attribute_type(att_index)
-                att_new_value = text1
-
-                print("Attribute", att_index, "current:", att_value, "new:", att_new_value)
-                if att_value != att_new_value and hasattr(ifc_object, att_name):
+                # regular attributes > based on attribute index
+                # PropertySingleValue > wrapped value
+                if ifc_object.is_a('IfcPropertySingleValue') and text2 == 'None':
+                    # TODO: conflict when showing properties as attributes
+                    att_name = text0
+                    att_index = 3
+                    att_type = ifc_object.attribute_type(att_index)
+                    att_value = ifc_object.NominalValue.wrappedValue
                     try:
-                        if att_type == 'INT':
-                            setattr(ifc_object, att_name, int(att_new_value))
-                        if att_type == 'DOUBLE':
-                            setattr(ifc_object, att_name, float(att_new_value))
-                        if att_type == 'ENUMERATION':
-                            enum = get_enums_from_object(ifc_object, att_name)
-                            if att_new_value in enum:
-                                print('Valid enum value')
-                                setattr(ifc_object, att_name, att_new_value)
+                        attribute = ifc_object.wrapped_data.get_argument('NominalValue')
+                        # attribute = getattr(ifc_object, 'NominalValue')
+                        if str(text1) == '':
+                            # attribute.setArgumentAsNull(0)  # crashes?
+                            ifc_object.setArgumentAsNull(3)
+                        else:
+                            if attribute.is_a('IfcAreaMeasure') or attribute.is_a('IfcLengthMeasure')\
+                                    or attribute.is_a('IfcVolumeMeasure'):
+                                attribute.setArgumentAsDouble(0, float(text1))
+                            elif attribute.is_a('IfcText'):
+                                attribute.setArgumentAsString(0, str(text1))
+                            elif attribute.is_a('IfcBoolean'):
+                                attribute.setArgumentAsString(0, bool(text1))
                             else:
-                                print('Invalid enum value')
-                                model.setData(index, str(att_value))
-                        if att_type == 'STRING':
-                            setattr(ifc_object, att_name, att_new_value)
+                                setattr(attribute, 'wrappedValue', text1)
+                                pass
+                                attribute.setArgumentAsBool(0, float(text1))
+                                attribute.setArgumentAsNull(0)
+                            model.setData(index, text1)
+
                     except:
-                        print("Could not set Attribute :", att_name, " with value ", att_new_value)
-                        print("So we reset it to ", att_value)
+                        print("Could not set Attribute :", text0, " with value ", text1)
+                        print("So we reset it to ", str(ifc_object.NominalValue.wrappedValue))
                         model.setData(index, str(att_value))
                         pass
-                    # Warn other views, but only needed if Name is changed
-                    if att_name == "Name":
-                        self.send_update_object.emit(ifc_object)
-                        pass
+                else:
+                    att_name = text0
+                    att_index = ifc_object.wrapped_data.get_argument_index(att_name)
+                    att_value = ifc_object.wrapped_data.get_argument(att_index)
+                    # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
+                    att_type = ifc_object.attribute_type(att_index)
+                    att_new_value = text1
+
+                    print("Attribute", att_index, "current:", att_value, "new:", att_new_value)
+                    if att_value != att_new_value and hasattr(ifc_object, att_name):
+                        try:
+                            if att_type == 'INT':
+                                setattr(ifc_object, att_name, int(att_new_value))
+                            if att_type == 'DOUBLE':
+                                setattr(ifc_object, att_name, float(att_new_value))
+                            if att_type == 'BOOL':
+                                setattr(ifc_object, att_name, bool(att_new_value))
+                            if att_type == 'ENUMERATION':
+                                enum = get_enums_from_object(ifc_object, att_name)
+                                if att_new_value in enum:
+                                    print('Valid enum value')
+                                    setattr(ifc_object, att_name, att_new_value)
+                                else:
+                                    print('Invalid enum value')
+                                    model.setData(index, str(att_value))
+                            if att_type == 'STRING':
+                                setattr(ifc_object, att_name, att_new_value)
+                        except:
+                            print("Could not set Attribute :", att_name, " with value ", att_new_value)
+                            print("So we reset it to ", att_value)
+                            model.setData(index, str(att_value))
+                            pass
+                        # Warn other views, but only needed if Name is changed
+                        if att_name == "Name":
+                            self.send_update_object.emit(ifc_object)
+                            pass
 
         else:
             QItemDelegate.setModelData(self, editor, model, index)
@@ -645,13 +715,16 @@ class QCustomDelegate(QItemDelegate):
             text2 = model.index(row, 2, parent).data(Qt.DisplayRole)
             ifc_object = index.data(Qt.UserRole)
             if ifc_object is not None:
-                if text0 != 'GlobalId' and text2 in ['STRING', 'DOUBLE', 'ENUMERATION', 'INT']:
+                if text0 != 'GlobalId' and text2 in ['STRING', 'DOUBLE', 'ENUMERATION', 'INT', 'BOOL']:
                     # add a greenish background color to indicate editable cells
-                    painter.fillRect(styleoptions.rect, QColor(191, 222, 185, 20))
+                    painter.fillRect(styleoptions.rect, QColor(191, 222, 185, 30))
+                elif ifc_object.is_a('IfcPropertySingleValue'):
+                    painter.fillRect(styleoptions.rect, QColor(191, 185, 222, 30))
 
         # But also do the regular paint
         QItemDelegate.paint(self, painter, styleoptions, index)
 
+# endregion
 
 if __name__ == '__main__':
     app = 0

@@ -149,6 +149,7 @@ class IFCTreeWidget(QWidget):
     def close_files(self):
         self.ifc_files.clear()
         self.object_tree.clear()
+        self.prepare_chooser()
 
     def load_file(self, filename):
         """

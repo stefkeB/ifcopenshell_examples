@@ -16,6 +16,7 @@ class QIFCViewer(QMainWindow):
 
         # A dictionary referring to our files, based on name
         self.ifc_files = {}
+        self.setAcceptDrops(True)
 
         # menu, actions and toolbar
         toolbar = QToolBar("My main toolbar")
@@ -119,6 +120,36 @@ class QIFCViewer(QMainWindow):
         self.view_3d.load_file(filename)
         print("Loaded all views in ", time.time() - start)
         return True
+
+    def dragEnterEvent(self, event):
+        data = event.mimeData()
+        urls = data.urls()
+        if urls and urls[0].scheme() == 'file':
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        data = event.mimeData()
+        urls = data.urls()
+        if urls and urls[0].scheme() == 'file':
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        data = event.mimeData()
+        urls = data.urls()
+        if urls and urls[0].scheme() == 'file':
+            for f in urls:
+                filepath = str(f.path())
+                # any file type here
+                if os.path.isfile(filepath) and filepath[-4:] == '.ifc':
+                    self.load_file(filepath)
+                # if filepath[-4:].upper() == ".ifc":
+                #    # self.setText(filepath)
+                else:
+                    dialog = QMessageBox()
+                    dialog.setWindowTitle("Error: Invalid File")
+                    dialog.setText(str("Only .ifc files are accepted.\nYou dragged {}").format(filepath))
+                    dialog.setIcon(QMessageBox.Warning)
+                    dialog.exec_()
 
     def reload_files(self):
         """

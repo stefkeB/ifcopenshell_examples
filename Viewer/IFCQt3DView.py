@@ -65,6 +65,8 @@ class IFCQt3dView(QWidget):
     add_to_selected_entities = pyqtSignal(str)
     remove_from_selected_entities = pyqtSignal(str)
 
+    # region Initialisation
+
     def __init__(self):
         QWidget.__init__(self)
 
@@ -148,8 +150,9 @@ class IFCQt3dView(QWidget):
         picking_settings.setFaceOrientationPickingMode(QPickingSettings.FrontAndBackFace)
         # set QObjectPicker to PointPicking:
         picking_settings.setPickMethod(QPickingSettings.TrianglePicking)
+        # picking_settings.setPickMethod(QPickingSettings.LinePicking)
         # picking_settings.setPickMethod(QPickingSettings.PointPicking)
-        # picking_settings.setPickResultMode(QPickingSettings.NearestPick)
+        picking_settings.setPickResultMode(QPickingSettings.NearestPick)
         # picking_settings.setWorldSpaceTolerance(.5)
         # self.picker.setHoverEnabled(True)
         # self.picker.setDragEnabled(True)
@@ -167,6 +170,10 @@ class IFCQt3dView(QWidget):
         splitter.addWidget(self.container)
         splitter.addWidget(self.scene_graph)
         self.setLayout(layout)
+
+    # endregion
+
+    # region SelectionMethods
 
     def select_object_by_id(self, object_id):
         print("IFCQt3dView.select_object_by_id ", object_id)
@@ -250,7 +257,10 @@ class IFCQt3dView(QWidget):
         if e.button() == Qt.LeftButton and e.modifiers() == Qt.ControlModifier:
             self.toggle_entity(parent)
         else:
-            self.select_exclusive_entity(parent)
+            if e.button() == Qt.LeftButton:
+                self.select_exclusive_entity(parent)
+
+    # endregion
 
     def toggle_meshes(self):
         # Parse the whole Scenegraph and hide all branches with a Triangle Renderer
@@ -259,6 +269,8 @@ class IFCQt3dView(QWidget):
     def toggle_wireframe(self):
         # Parse the whole Scenegraph and hide all branches with a Lines Renderer
         print("Not implemented")
+
+    # region SceneMethods
 
     def initialise_camera(self):
         # camera
@@ -308,6 +320,10 @@ class IFCQt3dView(QWidget):
         light_transform2.setObjectName("Light Transform")
         light_transform2.setTranslation(QVector3D(10.0, -40.0, 0.0))
         light_entity2.addComponent(light_transform2)
+
+    # endregion
+
+    # region FileMethods
 
     def close_files(self):
         for child in self.files.children():
@@ -375,6 +391,10 @@ class IFCQt3dView(QWidget):
 
         self.update_scene_graph_tree()
         # self.scene_graph.expandToDepth(1)
+
+    # endregion
+
+    # region SceneGraphMethods
 
     def toggle_visibility(self, tree_item, column):
         # get the widget item
@@ -450,6 +470,10 @@ class IFCQt3dView(QWidget):
         # iterate over children
         for item in node.children():
             self.update_scene_graph_tree(item, node_item)
+
+    # endregion
+
+    # region GeometryMethods
 
     def parse_geometry(self, filename, settings):
         ifc_file = self.ifc_files[filename]
@@ -805,6 +829,8 @@ class IFCQt3dView(QWidget):
         custom_line_entity.addComponent(transform)
         custom_line_entity.addComponent(custom_line_renderer)
         custom_line_entity.addComponent(self.material)
+
+    # endregion
 
 
 # Our Main function
