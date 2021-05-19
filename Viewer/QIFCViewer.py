@@ -10,6 +10,7 @@ class QIFCViewer(QMainWindow):
     - V2 = Open + Save methods, Toolbar and Status Bar & Files in a Dictionary
     - V3 = Use separate Tree Views as two separate Dock Widgets and link them
     - V4 = Syncing updates & edits of values between Object and Property Tree
+    - V5 = Supporting drag and drop of IFC files onto the app
     """
     def __init__(self):
         QMainWindow.__init__(self)
@@ -139,11 +140,9 @@ class QIFCViewer(QMainWindow):
         if urls and urls[0].scheme() == 'file':
             for f in urls:
                 filepath = str(f.path())
-                # any file type here
-                if os.path.isfile(filepath) and filepath[-4:] == '.ifc':
+                # only .ifc files are acceptable
+                if os.path.isfile(filepath) and os.path.splitext(filepath)[1] == '.ifc':
                     self.load_file(filepath)
-                # if filepath[-4:].upper() == ".ifc":
-                #    # self.setText(filepath)
                 else:
                     dialog = QMessageBox()
                     dialog.setWindowTitle("Error: Invalid File")

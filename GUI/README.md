@@ -16,3 +16,9 @@ This is a more advanced viewer, where a second tree is used to display type, pro
 
 
 ![result](images/ifc_treeviewer2_complete.png)
+
+## ifc_schemaviewer.py
+
+A small Tree view of the IFC schema. You can switch between IFC2X3 and IFC4.
+
+![result](images/ifc_schemaviewer.png)
