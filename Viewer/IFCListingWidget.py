@@ -120,7 +120,7 @@ class HeaderEditor(QWidget):
         hbox.addWidget(apply)
         # Button : Insert
         insert = QPushButton("Insert")
-        insert.setToolTip("Insert Header Item")
+        insert.setToolTip("Insert Header Item\nid, class, type or any\nattribute, property or quantity name")
         insert.clicked.connect(self.insert_item)
         hbox.addWidget(insert)
         # Button : Remove
@@ -132,6 +132,7 @@ class HeaderEditor(QWidget):
         # List of Strings
         self.label_list = QListWidget()
         vbox.addWidget(self.label_list)
+        self.label_list.setDragDropMode(QListWidget.InternalMove)
 
     apply_labels = pyqtSignal(object)
 
@@ -335,7 +336,9 @@ class IFCListingWidget(QWidget):
                 row = self.object_list.rowCount()
                 self.object_list.insertRow(row)
                 for column, cell in enumerate(record):
-                    self.object_list.setItem(row, column, QTableWidgetItem(cell))
+                    new_item = QTableWidgetItem(cell)
+                    new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)
+                    self.object_list.setItem(row, column, new_item)
 
     def load_file(self, filename):
         """
