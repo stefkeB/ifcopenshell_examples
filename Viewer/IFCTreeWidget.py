@@ -189,6 +189,7 @@ class IFCTreeWidget(QWidget):
             dlg = QMessageBox(self.parent())
             dlg.setWindowTitle("Invalid IFC Class!")
             dlg.setStandardButtons(QMessageBox.Ok)
+            dlg.setIcon(QMessageBox.Critical)
             dlg.setText(str("{} is not a valid class name.\nSuggestions are IfcProject or IfcWall.").format(self.root_class))
             dlg.exec_()
         # Finish the GUI

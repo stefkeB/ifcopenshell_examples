@@ -1,6 +1,7 @@
 from IFCQt3DView import *
 from IFCTreeWidget import *
 from IFCPropertyWidget import *
+from IFCListingWidget import *
 
 
 class QIFCViewer(QMainWindow):
@@ -66,6 +67,7 @@ class QIFCViewer(QMainWindow):
         self.view_3d = IFCQt3dView()
         self.view_tree = IFCTreeWidget()
         self.view_properties = IFCPropertyWidget()
+        self.view_takeoff = IFCListingWidget()
 
         # Selection Syncing
         self.view_tree.select_object.connect(self.view_3d.select_object_by_id)
@@ -86,6 +88,11 @@ class QIFCViewer(QMainWindow):
         self.dock2.setFloating(False)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock2)
 
+        self.dock3 = QDockWidget('Take off', self)
+        self.dock3.setWidget(self.view_takeoff)
+        self.dock3.setFloating(False)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.dock3)
+
         # Main Widget = 3D View
         self.setCentralWidget(self.view_3d)
 
@@ -102,6 +109,7 @@ class QIFCViewer(QMainWindow):
             dlg = QMessageBox(self.parent())
             dlg.setWindowTitle("Model already loaded!")
             dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            dlg.setIcon(QMessageBox.Warning)
             dlg.setText("Do you want to replace the currently loaded model?")
             button = dlg.exec_()
             if button == QMessageBox.Cancel:
@@ -119,6 +127,8 @@ class QIFCViewer(QMainWindow):
 
         self.view_3d.ifc_files[filename] = ifc_file
         self.view_3d.load_file(filename)
+
+        self.view_takeoff.ifc_files[filename] = ifc_file
         print("Loaded all views in ", time.time() - start)
         return True
 
@@ -198,6 +208,7 @@ class QIFCViewer(QMainWindow):
         self.view_tree.close_files()
         self.view_properties.reset()
         self.view_3d.close_files()
+        self.view_takeoff.close_files()
         self.setWindowTitle("IFC Viewer")
 
 
