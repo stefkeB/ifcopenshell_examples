@@ -1,3 +1,4 @@
+# region Imports
 import sys
 import time
 import os.path
@@ -49,6 +50,8 @@ from OCC.Core.Tesselator import ShapeTesselator
 from collections import namedtuple
 shape_tuple = namedtuple("shape_tuple", ("data", "geometry", "styles", "style_ids"))
 
+# endregion
+
 
 class IFCQt3dView(QWidget):
     """
@@ -99,32 +102,38 @@ class IFCQt3dView(QWidget):
         self.files.setParent(self.root)
 
         # Selection List & Shared Materials
+        self.materials = QEntity()
+        self.materials.setObjectName("Materials")
+        self.materials.setProperty("IsProduct", True)
+        self.materials.setParent(self.scene)
         self.selected = []
         self.mat_highlight = QGoochMaterial()
         self.mat_highlight.setObjectName("Shared Highlight Material")
         self.mat_highlight.setShareable(True)
         self.mat_highlight.setDiffuse(QColor(50, 250, 50))
         self.mat_highlight.setShininess(0.5)
-        self.scene.addComponent(self.mat_highlight)
+        self.materials.addComponent(self.mat_highlight)
 
         self.material = QPerVertexColorMaterial()
         self.material.setObjectName("Shared Vertex Color Material")
         self.material.setShareable(True)
-        self.scene.addComponent(self.material)
+        self.materials.addComponent(self.material)
 
         self.transparent = QDiffuseSpecularMaterial()
         self.transparent.setObjectName("Shared Transparent Material")
         self.transparent.setShareable(True)
         self.transparent.setAlphaBlendingEnabled(True)
         self.transparent.setDiffuse(QColor(230, 230, 250, 150))
-        self.scene.addComponent(self.transparent)
+        self.materials.addComponent(self.transparent)
 
         self.edge_material = QDiffuseSpecularMaterial()
         self.edge_material.setObjectName("Shared Lines Material")
         self.edge_material.setShareable(True)
         self.edge_material.setDiffuse(QColor(50, 50, 50))
-        self.scene.addComponent(self.edge_material)
+        self.materials.addComponent(self.edge_material)
 
+        self.camera = None
+        self.cam_controller = None
         self.initialise_camera()
         self.create_light()
         self.view.setRootEntity(self.root)
@@ -143,6 +152,7 @@ class IFCQt3dView(QWidget):
         # self.scene_graph.itemPressed.connect(self.toggle_visibility)
 
         # picking
+        self.picking_sphere = None
         picking_settings = self.view.renderSettings().pickingSettings()
         self.picker = QObjectPicker(self.scene)
         self.picker.setObjectName("Picker")
@@ -168,7 +178,27 @@ class IFCQt3dView(QWidget):
         splitter = QSplitter(Qt.Horizontal)
         layout.addWidget(splitter)
         splitter.addWidget(self.container)
-        splitter.addWidget(self.scene_graph)
+        # splitter.addWidget(self.scene_graph)
+
+        vbox = QVBoxLayout()
+        # Series of buttons and check boxes in a horizontal layout
+        buttons = QWidget()
+        hbox = QHBoxLayout()
+        hbox.setContentsMargins(0, 0, 0, 0)
+        buttons.setLayout(hbox)
+        # Add buttons
+        # Button : Reset Camera
+        btn_camera_reset = QPushButton("Reset Camera")
+        btn_camera_reset.setToolTip("Reset the camera position")
+        btn_camera_reset.pressed.connect(self.reset_camera)
+        hbox.addWidget(btn_camera_reset)
+        # Add Scenegraph
+        scenegraph = QWidget()
+        scenegraph.setLayout(vbox)
+        vbox.addWidget(buttons)
+        vbox.addWidget(self.scene_graph)
+        splitter.addWidget(scenegraph)
+
         self.setLayout(layout)
 
     # endregion
@@ -245,7 +275,28 @@ class IFCQt3dView(QWidget):
         self.add_to_selected_entities.emit(entity.objectName())
 
     def pick(self, e: QPickTriangleEvent):
-        # intersection = e.localIntersection()
+        localPosition = e.localIntersection()
+        worldPosition = e.worldIntersection()  # QVector3D
+
+        # self.view.camera().setViewCenter(worldPosition)
+
+        # Place the picking sphere at the Pick position
+        if self.picking_sphere is None:
+            self.picking_sphere = QEntity(self.scene)
+            self.picking_sphere.setObjectName("Picking Sphere")
+            material = QPhongMaterial()
+            material.setAmbient(QColor(100, 50, 50))
+            material.setDiffuse(QColor(200, 150, 150))
+            self.picking_sphere.addComponent(material)
+            sphere_mesh = QSphereMesh()
+            sphere_mesh.setRadius(0.2)
+            self.picking_sphere.addComponent(sphere_mesh)
+        sphere_position = QTransform()
+        sphere_position.setTranslation(worldPosition)
+        self.picking_sphere.addComponent(sphere_position)
+
+
+        #
         entity = e.entity()
         if entity is None:
             return
@@ -272,20 +323,45 @@ class IFCQt3dView(QWidget):
 
     # region SceneMethods
 
+    def reset_camera(self):
+        # self.cam_index = 0
+        # self.cameras = []
+        controlled_cam = self.cam_controller.camera()
+        view_cam = self.view.camera()
+        # view_cam.lens().setPerspectiveProjection(45.0, 16.0 / 9.0, 0.1, 200)  # 16.0 / 9.0, 0.1, 200)
+        view_cam.setPosition(QVector3D(0, 0, 40))
+        view_cam.setViewCenter(QVector3D(0, 0, 0))
+        view_cam.setUpVector(QVector3D(0, 1, 0))
+        view_cam.setFieldOfView(45.0)
+        # self.cameras.append(view_cam)
+        # cam_ortho = QCamera()
+        # cam_ortho.lens().setOrthographicProjection(5.0, 5.0, 5.0, 5.0, 0.0, 200.0)
+        # cam_ortho.setPosition(QVector3D(30, 30, 30))
+        # cam_ortho.setViewCenter(QVector3D(0, 0, 0))
+        # self.cameras.append(cam_ortho)
+        #
+        # self.camera = self.cameras[1]
+
     def initialise_camera(self):
         # camera
-        camera = self.view.camera()
-        camera.setObjectName("Camera")
-        camera.lens().setPerspectiveProjection(45.0, 16.0 / 9.0, 0.1, 1000)
-        camera.setPosition(QVector3D(0, 0, 40))
-        camera.setViewCenter(QVector3D(0, 0, 0))
+        if self.camera is None:
+            self.camera = self.view.camera()
+            self.camera.setObjectName("Camera")
+            ratio = self.view.width() / self.view.height()
+            self.camera.lens().setPerspectiveProjection(45.0, ratio, 0.1, 200)  # 16.0 / 9.0, 0.1, 200)
+            self.camera.setPosition(QVector3D(0, 0, 40))
+            self.camera.setViewCenter(QVector3D(0, 0, 0))
+            self.camera.setUpVector(QVector3D(0, 1, 0))
+            self.camera.setFieldOfView(45.0)
 
         # for camera control
-        cam_controller = QOrbitCameraController(self.scene)
-        cam_controller.setObjectName("Orbit Camera Controller")
-        cam_controller.setLinearSpeed(50.0)
-        cam_controller.setLookSpeed(180.0)
-        cam_controller.setCamera(camera)
+        if self.cam_controller is None:
+            self.cam_controller = QOrbitCameraController(self.scene)
+            # self.cam_controller = QFirstPersonCameraController(self.scene)
+            self.cam_controller.setObjectName("Orbit Camera Controller")
+            self.cam_controller.setLinearSpeed(50.0)
+            self.cam_controller.setLookSpeed(180.0)
+            self.cam_controller.setCamera(self.camera)
 
     def create_light(self):
         # Light

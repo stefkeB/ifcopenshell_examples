@@ -150,6 +150,7 @@ class IFCPropertyWidget(QWidget):
         attributes = ifc_object.wrapped_data.get_inverse_attribute_names()
         for att_idx, att_name in enumerate(attributes):
             attribute_item0 = QStandardItem(att_name)
+            attribute_item0.setData(ifc_object, Qt.UserRole)  # remember the owner of this attribute
             parent_item.appendRow([attribute_item0])
 
             inv_attribute_tuple = getattr(ifc_object, att_name)
@@ -158,13 +159,11 @@ class IFCPropertyWidget(QWidget):
                     att_class = get_friendly_ifc_name(nested_att) if nested_att is not None else ''
                     nested_attribute_item0 = QStandardItem("[" + str(i) + "]")
                     nested_attribute_item1 = QStandardItem(att_class)
-                    # attribute_item1.setToolTip(att_value)
-                    # attribute_item2 = QStandardItem(att_type)
-                    # attribute_item0.setData(ifc_object, Qt.UserRole)  # remember the owner of this attribute
+                    # nested_attribute_item1.setToolTip(att_value)
+                    # nested_attribute_item2 = QStandardItem(att_type)
+                    # nested_attribute_item1.setData(nested_att, Qt.UserRole)  # remember the owner of this attribute
                     attribute_item0.appendRow([nested_attribute_item0, nested_attribute_item1])
                     self.add_attributes_in_tree(nested_att, nested_attribute_item0)
-
-
 
     def add_attributes_in_tree(self, ifc_object, parent_item, recursion=0):
         """
