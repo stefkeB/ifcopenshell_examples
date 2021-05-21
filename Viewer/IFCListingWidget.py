@@ -176,7 +176,7 @@ class HeaderEditor(QWidget):
 class IFCListingWidget(QWidget):
     """
     Fifth version of the IFC Tree Widget/View
-    - V1 = Basic List + Takeoff Button
+    - V1 = Take off Table + Takeoff Button + CSV export + Header Editor
     """
     def __init__(self):
         QWidget.__init__(self)
@@ -240,8 +240,8 @@ class IFCListingWidget(QWidget):
         hbox.addWidget(default)
 
         # Listing Widget
-        self.object_list = QTableWidget()
-        vbox.addWidget(self.object_list)
+        self.object_table = QTableWidget()
+        vbox.addWidget(self.object_table)
         self.default_header()
 
     def close_files(self):
@@ -249,11 +249,11 @@ class IFCListingWidget(QWidget):
         self.reset()
 
     def reset(self):
-        self.object_list.clear()
-        model = self.object_list.model()
+        self.object_table.clear()
+        model = self.object_table.model()
         model.removeRows(0, model.rowCount())
-        self.object_list.setColumnCount(len(self.header))
-        self.object_list.setHorizontalHeaderLabels(self.header)
+        self.object_table.setColumnCount(len(self.header))
+        self.object_table.setHorizontalHeaderLabels(self.header)
 
     def edit(self):
         # open a dialog with a StringList edit widget
@@ -272,22 +272,22 @@ class IFCListingWidget(QWidget):
             qto_writer = csv.writer(csv_file, delimiter=';')
             qto_writer.writerow(self.header)
 
-            if self.object_list.rowCount() == 0:
+            if self.object_table.rowCount() == 0:
                 for _, file in self.ifc_files.items():
                     items = file.by_type(self.root_class)
                     for item in items:
                         record = takeoff_element(item, self.header)
                         qto_writer.writerow(record)
                         # add an empty row
-                        row = self.object_list.rowCount()
-                        self.object_list.insertRow(row)
+                        row = self.object_table.rowCount()
+                        self.object_table.insertRow(row)
                         for column, cell in enumerate(record):
-                            self.object_list.setItem(row, column, QTableWidgetItem(cell))
+                            self.object_table.setItem(row, column, QTableWidgetItem(cell))
             else:
-                for r in range(self.object_list.rowCount()):
+                for r in range(self.object_table.rowCount()):
                     record = []
-                    for c in range(self.object_list.columnCount()):
-                        item = self.object_list.item(r, c)
+                    for c in range(self.object_table.columnCount()):
+                        item = self.object_table.item(r, c)
                         record.append(item.text())
                     qto_writer.writerow(record)
             csv_file.close()
@@ -307,8 +307,8 @@ class IFCListingWidget(QWidget):
                       "NetSideArea", "GrossArea", "NetArea", "GrossVolume", "NetVolume"]
         # concatenate
         self.header.extend(attributes + properties + quantities)
-        self.object_list.setColumnCount(len(self.header))
-        self.object_list.setHorizontalHeaderLabels(self.header)
+        self.object_table.setColumnCount(len(self.header))
+        self.object_table.setHorizontalHeaderLabels(self.header)
 
     def toggle_chooser(self, text):
         self.root_class = self.root_class_chooser.currentText()
@@ -326,25 +326,33 @@ class IFCListingWidget(QWidget):
                 dlg.setWindowTitle("Invalid IFC Class!")
                 dlg.setStandardButtons(QMessageBox.Close)
                 dlg.setIcon(QMessageBox.Critical)
-                dlg.setText(str("{} is not a valid IFC class name.\n\nSuggestions are IfcElement or IfcWall.").format(
+                dlg.setText(str("{} is not a valid IFC class name.\n"
+                                "\nSuggestions are IfcElement or IfcWall.\n"
+                                "We will reset it to 'IfcElement'").format(
                     self.root_class))
                 dlg.exec_()
+                wrong_value = self.root_class
+                index_of_wrong = self.root_class_chooser.findText(wrong_value)
+                self.root_class_chooser.removeItem(index_of_wrong)
+                self.root_class = 'IfcElement'
+                self.root_class_chooser.setCurrentText(self.root_class)
                 return
             for item in items:
                 record = takeoff_element(item, self.header)
                 # add an empty row
-                row = self.object_list.rowCount()
-                self.object_list.insertRow(row)
+                row = self.object_table.rowCount()
+                self.object_table.insertRow(row)
                 for column, cell in enumerate(record):
                     new_item = QTableWidgetItem(cell)
                     new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)
-                    self.object_list.setItem(row, column, new_item)
+                    self.object_table.setItem(row, column, new_item)
 
     def load_file(self, filename):
         """
-        Load the file passed as filename.
+        Load the IFC file passed as filename.
 
         :param filename: Full path to the IFC file
+        :type filename: str
         """
         ifc_file = None
         if filename in self.ifc_files:
@@ -364,9 +372,21 @@ if __name__ == '__main__':
         app = QApplication(sys.argv)
 
     w = IFCListingWidget()
+    w.setWindowTitle('IFC Listing')
     w.resize(600, 800)
-    filename = sys.argv[1]
-    if os.path.isfile(filename):
-        w.load_file(filename)
-        w.show()
+    # input 2 = CSV with headers
+    if len(sys.argv) > 2:
+        if os.path.isfile(sys.argv[2]):
+            csv_file = open(sys.argv[2])
+            reader = csv.reader(csv_file, delimiter=';')
+            row1 = next(reader)
+            header = []
+            for e in row1:
+                header.append(str(e))
+            w.set_headers(header)
+    # input 1 = the IFC file to load
+    if os.path.isfile(sys.argv[1]):
+        w.load_file(sys.argv[1])
+    # finally display the window & execute the app
+    w.show()
     sys.exit(app.exec_())

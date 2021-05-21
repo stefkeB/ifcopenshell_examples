@@ -24,6 +24,7 @@ class IFCPropertyWidget(QWidget):
     - V3 = Refining, add Assignments
     - V4 = Editing Attributes (STRING, DOUBLE, INT and ENUMERATION)
     - V5 = QTreeWidget replaced with QTreeView
+    - V6 = Inverse Attributes
     """
 
     send_update_object = pyqtSignal(object)
@@ -37,6 +38,7 @@ class IFCPropertyWidget(QWidget):
 
         # Main Settings
         self.follow_attributes = False
+        self.follow_inverse_attributes = False
         self.follow_properties = True
         self.follow_associations = False
         self.follow_assignments = False
@@ -59,6 +61,12 @@ class IFCPropertyWidget(QWidget):
         self.check_a.setChecked(self.follow_attributes)
         self.check_a.toggled.connect(self.toggle_attributes)
         hbox.addWidget(self.check_a)
+        # Option: Display Inverse Attributes
+        self.check_ia = QCheckBox("InvAttr")
+        self.check_ia.setToolTip("Display all inverse attributes")
+        self.check_ia.setChecked(self.follow_inverse_attributes)
+        self.check_ia.toggled.connect(self.toggle_inverse_attributes)
+        hbox.addWidget(self.check_ia)
         # Option: Display Properties
         self.check_p = QCheckBox("Props")
         self.check_p.setToolTip("Display DefinedByProperties (incl. quantities)")
@@ -128,6 +136,36 @@ class IFCPropertyWidget(QWidget):
 
     # region InformationFilling
 
+    def add_inverse_attributes_in_tree(self, ifc_object, parent_item, recursion=0):
+        """
+        Fill the property tree with the inverse ttributes of an object. When the "show all"
+        option is activated, this will enable recursive attribute display. This can
+        potentially go very deep and take a long time with deep structures or
+        large geometry.
+
+        :param ifc_object: IFC entity
+        :param parent_item: QStandardItem used to put attributes underneath
+        :param recursion: To avoid infinite recursion, the recursion level is checked
+        """
+        attributes = ifc_object.wrapped_data.get_inverse_attribute_names()
+        for att_idx, att_name in enumerate(attributes):
+            attribute_item0 = QStandardItem(att_name)
+            parent_item.appendRow([attribute_item0])
+
+            inv_attribute_tuple = getattr(ifc_object, att_name)
+            if len(inv_attribute_tuple) > 0:
+                for i, nested_att in enumerate(inv_attribute_tuple):
+                    att_class = get_friendly_ifc_name(nested_att) if nested_att is not None else ''
+                    nested_attribute_item0 = QStandardItem("[" + str(i) + "]")
+                    nested_attribute_item1 = QStandardItem(att_class)
+                    # attribute_item1.setToolTip(att_value)
+                    # attribute_item2 = QStandardItem(att_type)
+                    # attribute_item0.setData(ifc_object, Qt.UserRole)  # remember the owner of this attribute
+                    attribute_item0.appendRow([nested_attribute_item0, nested_attribute_item1])
+                    self.add_attributes_in_tree(nested_att, nested_attribute_item0)
+
+
+
     def add_attributes_in_tree(self, ifc_object, parent_item, recursion=0):
         """
         Fill the property tree with the attributes of an object. When the "show all"
@@ -135,7 +173,7 @@ class IFCPropertyWidget(QWidget):
         potentially go very deep and take a long time with deep structures or
         large geometry.
 
-        :param ifc_object: IfcPropertySet containing individual properties
+        :param ifc_object: IFC entity
         :param parent_item: QStandardItem used to put attributes underneath
         :param recursion: To avoid infinite recursion, the recursion level is checked
         """
@@ -316,15 +354,19 @@ class IFCPropertyWidget(QWidget):
 
         # Attributes
         if self.follow_attributes:
-            my_id = ifc_object.GlobalId if hasattr(ifc_object, "GlobalId") else str("#{}").format(ifc_object.id())
-            attributes_item1 = QStandardItem("Attributes")
-            attributes_item2 = QStandardItem(get_friendly_ifc_name(ifc_object))
-            self.model.invisibleRootItem().appendRow([attributes_item1, attributes_item2])
-            self.add_attributes_in_tree(ifc_object, attributes_item1)
+            # my_id = ifc_object.GlobalId if hasattr(ifc_object, "GlobalId") else str("#{}").format(ifc_object.id())
+            attributes_item0 = QStandardItem("Attributes [" + str(len(ifc_object)) + "]")
+            attributes_item1 = QStandardItem(get_friendly_ifc_name(ifc_object))
+            self.model.invisibleRootItem().appendRow([attributes_item0, attributes_item1])
+            self.add_attributes_in_tree(ifc_object, attributes_item0)
 
-            # inv_attributes_item = QTreeWidgetItem(["Inverse Attributes", get_friendly_ifc_name(ifc_object), my_id])
-            # self.property_tree.addTopLevelItem(inv_attributes_item)
-            # self.add_inverseattributes_in_tree(ifc_object, inv_attributes_item)
+        if self.follow_inverse_attributes:
+            inv_attributes_item0 =\
+                QStandardItem("Inverse Attributes ["
+                              + str(len(ifc_object.wrapped_data.get_inverse_attribute_names())) + "]")
+            inv_attributes_item1 = QStandardItem(get_friendly_ifc_name(ifc_object))
+            self.model.invisibleRootItem().appendRow([inv_attributes_item0, inv_attributes_item1])
+            self.add_inverse_attributes_in_tree(ifc_object, inv_attributes_item0)
 
         # Has Assignments
         if self.follow_assignments and hasattr(ifc_object, 'HasAssignments'):
@@ -472,6 +514,10 @@ class IFCPropertyWidget(QWidget):
 
     def toggle_attributes(self):
         self.follow_attributes = not self.follow_attributes
+        self.regenerate()
+
+    def toggle_inverse_attributes(self):
+        self.follow_inverse_attributes = not self.follow_inverse_attributes
         self.regenerate()
 
     def toggle_properties(self):
