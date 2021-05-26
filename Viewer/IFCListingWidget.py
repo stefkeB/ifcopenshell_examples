@@ -96,11 +96,14 @@ def takeoff_element(element, header):
 
 # region Header Editor
 
-class HeaderEditor(QWidget):
+
+class StringListEditor(QWidget):
+    """
+    Generic List Widget to edit a list of Strings.
+    Could be applied in different places.
+    """
     def __init__(self):
         QWidget.__init__(self)
-        # Main list of strings
-        # self.labels = []
 
         # Prepare Widgets in a stretchable layout
         vbox = QVBoxLayout()
@@ -115,17 +118,17 @@ class HeaderEditor(QWidget):
 
         # Button : Apply
         apply = QPushButton("Apply")
-        apply.setToolTip("Apply the Headers")
+        apply.setToolTip("Apply the List")
         apply.clicked.connect(self.apply)
         hbox.addWidget(apply)
         # Button : Insert
         insert = QPushButton("Insert")
-        insert.setToolTip("Insert Header Item\nid, class, type or any\nattribute, property or quantity name")
+        insert.setToolTip("Insert Item into the List\nid, class, type or any\nattribute, property or quantity name")
         insert.clicked.connect(self.insert_item)
         hbox.addWidget(insert)
         # Button : Remove
         remove = QPushButton("Remove")
-        remove.setToolTip("Remove selected Header Item")
+        remove.setToolTip("Remove selected List Item")
         remove.clicked.connect(self.remove_item)
         hbox.addWidget(remove)
         # Stretchable Spacer
@@ -261,7 +264,7 @@ class IFCListingWidget(QWidget):
     def edit(self):
         # open a dialog with a StringList edit widget
         if self.header_editor is None:
-            self.header_editor = HeaderEditor()
+            self.header_editor = StringListEditor()
         self.header_editor.set_labels(self.header)
         self.header_editor.apply_labels.connect(self.set_headers)
         self.header_editor.show()
@@ -275,24 +278,16 @@ class IFCListingWidget(QWidget):
             qto_writer = csv.writer(csv_file, delimiter=';')
             qto_writer.writerow(self.header)
 
+            # take off if not done already
             if self.object_table.rowCount() == 0:
-                for _, file in self.ifc_files.items():
-                    items = file.by_type(self.root_class)
-                    for item in items:
-                        record = takeoff_element(item, self.header)
-                        qto_writer.writerow(record)
-                        # add an empty row
-                        row = self.object_table.rowCount()
-                        self.object_table.insertRow(row)
-                        for column, cell in enumerate(record):
-                            self.object_table.setItem(row, column, QTableWidgetItem(cell))
-            else:
-                for r in range(self.object_table.rowCount()):
-                    record = []
-                    for c in range(self.object_table.columnCount()):
-                        item = self.object_table.item(r, c)
-                        record.append(item.text())
-                    qto_writer.writerow(record)
+                self.take_off()
+            # export table to CSV
+            for r in range(self.object_table.rowCount()):
+                record = []
+                for c in range(self.object_table.columnCount()):
+                    item = self.object_table.item(r, c)
+                    record.append(item.text())
+                qto_writer.writerow(record)
             csv_file.close()
 
     def set_headers(self, labels):
@@ -348,6 +343,8 @@ class IFCListingWidget(QWidget):
                 for column, cell in enumerate(record):
                     new_item = QTableWidgetItem(cell)
                     new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)
+                    new_item.setData(Qt.UserRole, item)
+                    new_item.setToolTip('#' + str(item.id()))
                     self.object_table.setItem(row, column, new_item)
 
     def load_file(self, filename):
