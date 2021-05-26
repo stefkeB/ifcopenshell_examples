@@ -1,3 +1,5 @@
+import time
+import os.path
 from IFCQt3DView import *
 from IFCTreeWidget import *
 from IFCPropertyWidget import *
@@ -12,13 +14,16 @@ class QIFCViewer(QMainWindow):
     - V3 = Use separate Tree Views as two separate Dock Widgets and link them
     - V4 = Syncing updates & edits of values between Object and Property Tree
     - V5 = Supporting drag and drop of IFC files onto the app
+    - V6 = Make the 3D view optional (switch)
     """
-    def __init__(self):
+    def __init__(self, use_3d=True):
         QMainWindow.__init__(self)
 
         # A dictionary referring to our files, based on name
         self.ifc_files = {}
         self.setAcceptDrops(True)
+
+        self.USE_3D = use_3d
 
         # menu, actions and toolbar
         self.setUnifiedTitleAndToolBarOnMac(True)
@@ -67,24 +72,27 @@ class QIFCViewer(QMainWindow):
         self.setStatusBar(QStatusBar(self))
 
         # Main Widgets
-        self.view_3d = IFCQt3dView()
+        if self.USE_3D:
+            self.view_3d = IFCQt3dView()
         self.view_tree = IFCTreeWidget()
         self.view_properties = IFCPropertyWidget()
         self.view_takeoff = IFCListingWidget()
 
         # Selection Syncing
-        self.view_tree.select_object.connect(self.view_3d.select_object_by_id)
-        self.view_tree.deselect_object.connect(self.view_3d.deselect_object_by_id)
-        self.view_3d.add_to_selected_entities.connect(self.view_tree.receive_selection)
+        if self.USE_3D:
+            self.view_tree.select_object.connect(self.view_3d.select_object_by_id)
+            self.view_tree.deselect_object.connect(self.view_3d.deselect_object_by_id)
+            self.view_3d.add_to_selected_entities.connect(self.view_tree.receive_selection)
         self.view_tree.send_selection_set.connect(self.view_properties.set_from_selected_items)
         # Update Syncing
         self.view_properties.send_update_object.connect(self.view_tree.receive_object_update)
 
         # Docking Widgets
-        self.dock = QDockWidget('Model Tree', self)
-        self.dock.setWidget(self.view_tree)
-        self.dock.setFloating(False)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
+        if self.USE_3D is True:
+            self.dock = QDockWidget('Model Tree', self)
+            self.dock.setWidget(self.view_tree)
+            self.dock.setFloating(False)
+            self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
 
         self.dock2 = QDockWidget('Property Tree', self)
         self.dock2.setWidget(self.view_properties)
@@ -97,7 +105,10 @@ class QIFCViewer(QMainWindow):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.dock3)
 
         # Main Widget = 3D View
-        self.setCentralWidget(self.view_3d)
+        if self.USE_3D:
+            self.setCentralWidget(self.view_3d)
+        else:
+            self.setCentralWidget(self.view_tree)
 
     # region File Methods
 
@@ -131,8 +142,9 @@ class QIFCViewer(QMainWindow):
         self.view_tree.ifc_files[filename] = ifc_file
         self.view_tree.load_file(filename)
 
-        self.view_3d.ifc_files[filename] = ifc_file
-        self.view_3d.load_file(filename)
+        if self.USE_3D:
+            self.view_3d.ifc_files[filename] = ifc_file
+            self.view_3d.load_file(filename)
 
         self.view_takeoff.ifc_files[filename] = ifc_file
         print("Loaded all views in ", time.time() - start)
@@ -219,7 +231,8 @@ class QIFCViewer(QMainWindow):
         self.ifc_files = {}
         self.view_tree.close_files()
         self.view_properties.reset()
-        self.view_3d.close_files()
+        if self.USE_3D:
+            self.view_3d.close_files()
         self.view_takeoff.close_files()
         self.setWindowTitle("IFC Viewer")
 
@@ -232,7 +245,7 @@ def main():
     else:
         app = QApplication(sys.argv)
     app.setApplicationDisplayName("IFC Viewer")
-    w = QIFCViewer()
+    w = QIFCViewer(use_3d=False)
     w.setWindowTitle("IFC Viewer")
     w.resize(1280, 800)
     filename = sys.argv[1]
