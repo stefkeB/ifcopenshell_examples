@@ -188,10 +188,29 @@ class IFCQt3dView(QWidget):
         buttons.setLayout(hbox)
         # Add buttons
         # Button : Reset Camera
-        btn_camera_reset = QPushButton("Reset Camera")
+        btn_camera_reset = QPushButton("Reset")
         btn_camera_reset.setToolTip("Reset the camera position")
         btn_camera_reset.pressed.connect(self.reset_camera)
         hbox.addWidget(btn_camera_reset)
+        # Button : Store Camera
+        btn_camera_store = QPushButton("Store")
+        btn_camera_store.setToolTip("Store the camera position")
+        btn_camera_store.pressed.connect(self.store_camera)
+        hbox.addWidget(btn_camera_store)
+        # Button : Rotate Camera
+        btn_camera_rotate = QPushButton("Rotate")
+        btn_camera_rotate.setToolTip("Turntable 30° around pick point")
+        btn_camera_rotate.pressed.connect(self.rotate_around_position)
+        hbox.addWidget(btn_camera_rotate)
+        self.pick_position = QVector3D(0, 0, 0)
+        # Button : Update Tree
+        btn_update_tree = QPushButton("Update")
+        btn_update_tree.setToolTip("Update Scenegraph Tree")
+        btn_update_tree.pressed.connect(self.update_scene_graph_tree)
+        hbox.addWidget(btn_update_tree)
+        # Stretchable Spacer
+        spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
+        hbox.addSpacerItem(spacer)
         # Add Scenegraph
         scenegraph = QWidget()
         scenegraph.setLayout(vbox)
@@ -275,28 +294,11 @@ class IFCQt3dView(QWidget):
         self.add_to_selected_entities.emit(entity.objectName())
 
     def pick(self, e: QPickTriangleEvent):
-        localPosition = e.localIntersection()
-        worldPosition = e.worldIntersection()  # QVector3D
+        position = e.position()  # screen space
+        localPosition = e.localIntersection()  # model space
+        worldPosition = e.worldIntersection()  # world space QVector3D
+        self.pick_position = worldPosition
 
-        # self.view.camera().setViewCenter(worldPosition)
-
-        # Place the picking sphere at the Pick position
-        if self.picking_sphere is None:
-            self.picking_sphere = QEntity(self.scene)
-            self.picking_sphere.setObjectName("Picking Sphere")
-            material = QPhongMaterial()
-            material.setAmbient(QColor(100, 50, 50))
-            material.setDiffuse(QColor(200, 150, 150))
-            self.picking_sphere.addComponent(material)
-            sphere_mesh = QSphereMesh()
-            sphere_mesh.setRadius(0.2)
-            self.picking_sphere.addComponent(sphere_mesh)
-        sphere_position = QTransform()
-        sphere_position.setTranslation(worldPosition)
-        self.picking_sphere.addComponent(sphere_position)
-
-
-        #
         entity = e.entity()
         if entity is None:
             return
@@ -308,7 +310,28 @@ class IFCQt3dView(QWidget):
         if e.button() == Qt.LeftButton and e.modifiers() == Qt.ControlModifier:
             self.toggle_entity(parent)
         else:
-            if e.button() == Qt.LeftButton:
+            if e.button() == Qt.LeftButton and e.modifiers() == Qt.ShiftModifier:
+                # up = self.view.camera().upVector()
+                self.view.camera().setViewCenter(worldPosition)
+                self.view.camera().setUpVector(QVector3D(0, 1, 0))
+
+                # Place the picking sphere at the Pick position
+                if False:
+                    if self.picking_sphere is None:
+                        self.picking_sphere = QEntity(self.scene)
+                        self.picking_sphere.setObjectName("Picking Sphere")
+                        material = QPhongMaterial()
+                        material.setAmbient(QColor(100, 50, 50))
+                        material.setDiffuse(QColor(200, 150, 150))
+                        self.picking_sphere.addComponent(material)
+                        sphere_mesh = QSphereMesh()
+                        sphere_mesh.setRadius(0.1)
+                        self.picking_sphere.addComponent(sphere_mesh)
+                    sphere_position = QTransform()
+                    sphere_position.setTranslation(worldPosition)
+                    self.picking_sphere.addComponent(sphere_position)
+                    # self.generate_axis(5, worldPosition)
+            elif e.button() == Qt.LeftButton:
                 self.select_exclusive_entity(parent)
 
     # endregion
@@ -326,13 +349,19 @@ class IFCQt3dView(QWidget):
     def reset_camera(self):
         # self.cam_index = 0
         # self.cameras = []
-        controlled_cam = self.cam_controller.camera()
+        # controlled_cam = self.cam_controller.camera()
         view_cam = self.view.camera()
         # view_cam.lens().setPerspectiveProjection(45.0, 16.0 / 9.0, 0.1, 200)  # 16.0 / 9.0, 0.1, 200)
-        view_cam.setPosition(QVector3D(0, 0, 40))
-        view_cam.setViewCenter(QVector3D(0, 0, 0))
-        view_cam.setUpVector(QVector3D(0, 1, 0))
-        view_cam.setFieldOfView(45.0)
+        # view_cam.setPosition(QVector3D(0, 0, 40))
+        # view_cam.setViewCenter(QVector3D(0, 0, 0))
+        # view_cam.setUpVector(QVector3D(0, 1, 0))
+        # view_cam.setFieldOfView(45.0)
+
+        view_cam.setPosition(self.cam_pos)
+        view_cam.setViewCenter(self.cam_viewcenter)
+        view_cam.setFieldOfView(self.cam_fieldofview)
+        view_cam.setUpVector(self.cam_upvector)
+
         # self.cameras.append(view_cam)
         # cam_ortho = QCamera()
         # cam_ortho.lens().setOrthographicProjection(5.0, 5.0, 5.0, 5.0, 0.0, 200.0)
@@ -341,6 +370,29 @@ class IFCQt3dView(QWidget):
         # self.cameras.append(cam_ortho)
         #
         # self.camera = self.cameras[1]
+
+    def store_camera(self):
+        # capture current camera in a list
+        camera = self.view.camera()
+        self.cam_pos = camera.position()
+        self.cam_viewcenter = camera.viewCenter()
+        self.cam_viewvector = camera.viewVector()
+        self.cam_fieldofview = camera.fieldOfView()
+        self.cam_upvector = camera.upVector()
+        pass
+
+    def rotate_around_position(self, position=QVector3D(0,0,0), angle=30, rotation_axis=QVector3D(0,1,0)):
+        # capture current matrix
+        matrix = self.view.camera().transform().matrix()
+        # move to position
+        matrix.translate(-self.pick_position)
+        # do the rotation
+        matrix.rotate(30, QVector3D(0, 1, 0))
+        # translate back
+        matrix.translate(self.pick_position)
+        # apply matrix
+        self.view.camera().transform().setMatrix(matrix)
+        pass
 
     def initialise_camera(self):
         # camera
@@ -353,6 +405,12 @@ class IFCQt3dView(QWidget):
             self.camera.setViewCenter(QVector3D(0, 0, 0))
             self.camera.setUpVector(QVector3D(0, 1, 0))
             self.camera.setFieldOfView(45.0)
+
+            self.cam_pos = self.camera.position()
+            self.cam_viewcenter = self.camera.viewCenter()
+            self.cam_viewvector = self.camera.viewVector()
+            self.cam_fieldofview = self.camera.fieldOfView()
+            self.cam_upvector = self.camera.upVector()
 
         # for camera control
         if self.cam_controller is None:
@@ -407,7 +465,6 @@ class IFCQt3dView(QWidget):
         self.update_scene_graph_tree()
         self.model_nodes.clear()
         self.selected.clear()
-        # self.ifc_files.clear()  # OK or not?
         pass
 
     def load_file(self, filename):
@@ -466,7 +523,7 @@ class IFCQt3dView(QWidget):
         print("\nFinished in ", time.time() - self.start)
 
         self.update_scene_graph_tree()
-        # self.scene_graph.expandToDepth(1)
+        self.scene_graph.expandToDepth(1)
 
     # endregion
 
@@ -824,6 +881,8 @@ class IFCQt3dView(QWidget):
     def generate_axis(self, size, pos=None):
         if pos is None:
             pos = [0, 0, 0]
+        elif type(pos) == QVector3D:
+            pos = [pos.x(), pos.y(), pos.z()]
         x, y, z = pos[0], pos[1], pos[2]
         x_axis = [x, y, z, x + size, y, z]
         y_axis = [x, y, z, x, y + size, z]
@@ -835,6 +894,8 @@ class IFCQt3dView(QWidget):
     def generate_grid(self, extent, pos=None, step_size=1):
         if pos is None:
             pos = [0, 0, 0]
+        elif type(pos) == QVector3D:
+            pos = [pos.x(), pos.y(), pos.z()]
         x, y, z = pos[0], pos[1], pos[2]
         for h in range(-extent, extent + step_size, step_size):
             grid_line = [x + h, y - extent, z, x + h, y + extent, z]
