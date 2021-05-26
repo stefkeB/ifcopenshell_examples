@@ -21,7 +21,10 @@ class QIFCViewer(QMainWindow):
         self.setAcceptDrops(True)
 
         # menu, actions and toolbar
+        self.setUnifiedTitleAndToolBarOnMac(True)
         toolbar = QToolBar("My main toolbar")
+        toolbar.setFloatable(False)
+        toolbar.setMovable(False)
         self.addToolBar(toolbar)
         menu_bar = self.menuBar()
         file_menu = QMenu("&File", self)
@@ -96,6 +99,8 @@ class QIFCViewer(QMainWindow):
         # Main Widget = 3D View
         self.setCentralWidget(self.view_3d)
 
+    # region File Methods
+
     def load_file(self, filename):
         """
         Load an IFC file from the given path. If the file was already loaded,
@@ -110,7 +115,8 @@ class QIFCViewer(QMainWindow):
             dlg.setWindowTitle("Model already loaded!")
             dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
             dlg.setIcon(QMessageBox.Warning)
-            dlg.setText("Do you want to replace the currently loaded model?")
+            dlg.setText(str("Do you want to replace the currently loaded model?\n"
+                            "{}").format(filename))
             button = dlg.exec_()
             if button == QMessageBox.Cancel:
                 return False
@@ -176,10 +182,16 @@ class QIFCViewer(QMainWindow):
             dlg = QMessageBox(self.parent())
             dlg.setWindowTitle("Confirm file save")
             dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-            dlg.setText(str("Do you want to save: {}?").format(ifc_filename))
+            dlg.setText(str("Do you want to save:\n{}?").format(ifc_filename))
+            dlg.setDetailedText(str("When you click 'OK', you still have the chance of"
+                                    "selecting a new name or location."))
             button = dlg.exec_()
             if button == QMessageBox.Ok:
-                ifc_file.write(ifc_filename)
+                savepath = QFileDialog.getSaveFileName(self, caption="Save IFC File",
+                                                       directory=ifc_filename,
+                                                       filter="IFC files (*.ifc)")
+                if savepath[0] != '':
+                    ifc_file.write(savepath[0])
 
     def get_file(self):
         """
