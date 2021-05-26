@@ -97,6 +97,8 @@ class IFCTreeWidget(QWidget):
     deselect_object = pyqtSignal(object)
     send_selection_set = pyqtSignal(object)
 
+    # region Selection Methods
+
     def send_selection(self, selected_items, deselected_items):
         items = self.object_tree.selectedItems()
         self.send_selection_set.emit(items)
@@ -117,7 +119,7 @@ class IFCTreeWidget(QWidget):
                     GlobalId = entity.GlobalId
                     if GlobalId != '':
                         self.deselect_object.emit(GlobalId)
-                        print("treeview.send_selection.deselect_object ", GlobalId)
+                        print("IFCTreeWidget.send_selection.deselect_object ", GlobalId)
 
     def receive_selection(self, ids):
         print("IFCTreeWidget.receive_selection ", ids)
@@ -146,6 +148,10 @@ class IFCTreeWidget(QWidget):
                 item.setText(0, ifc_object.Name)
             iterator += 1
 
+    # endregion
+
+    # region File Methods
+
     def close_files(self):
         self.ifc_files.clear()
         self.object_tree.clear()
@@ -163,15 +169,19 @@ class IFCTreeWidget(QWidget):
             ifc_file = self.ifc_files[filename]
             for i in range(self.object_tree.topLevelItemCount()):
                 toplevel_item = self.object_tree.topLevelItem(i)
-                if filename == toplevel_item.text(0):
+                if toplevel_item is not None and filename == toplevel_item.text(0):
                     root = self.object_tree.invisibleRootItem()
                     root.removeChild(toplevel_item)
         else:  # Load as new file
             ifc_file = ifcopenshell.open(filename)
             self.ifc_files[filename] = ifc_file
 
-        self.add_objects(filename)
         self.prepare_chooser()
+        self.add_objects(filename)
+
+    # endregion
+
+    # region Object Tree Methods
 
     def add_objects(self, filename):
         """Fill the Object Tree with TreeItems representing Entity Instances
@@ -262,6 +272,10 @@ class IFCTreeWidget(QWidget):
         elif tmp & Qt.ItemIsEditable:
             item.setFlags(tmp ^ Qt.ItemIsEditable)
 
+    # endregion
+
+    # region UI Methods
+
     def toggle_decomposition(self):
         self.follow_decomposition = not self.follow_decomposition
         self.regenerate_tree()
@@ -272,6 +286,8 @@ class IFCTreeWidget(QWidget):
 
     def prepare_chooser(self):
         buffer = self.root_class_chooser.currentText()
+        if buffer == '':
+            buffer = 'IfcProject'
         self.root_class_chooser.clear()
         for _, file in self.ifc_files.items():
             for t in file.wrapped_data.types():
@@ -280,13 +296,15 @@ class IFCTreeWidget(QWidget):
 
         # Add all available classes in the Combobox
         self.root_class_chooser.setEditable(False)
-        self.root_class_chooser.setCurrentText(buffer)
         self.root_class_chooser.model().sort(0, Qt.AscendingOrder)
+        self.root_class_chooser.setCurrentText(buffer)
 
     def regenerate_tree(self):
         self.object_tree.clear()
         for filename, file in self.ifc_files.items():
             self.add_objects(filename)
+
+    # endregion
 
 
 if __name__ == '__main__':
