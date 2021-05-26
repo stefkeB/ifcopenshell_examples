@@ -621,6 +621,8 @@ class QCustomDelegate(QItemDelegate):
             text2 = model.index(row, 2, parent).data(Qt.DisplayRole)
             ifc_object = index.data(Qt.UserRole)
             if ifc_object is not None and text1 != 'GlobalId':
+                if text2 == 'ENTITY INSTANCE':
+                    return None
                 if text2 == 'ENUMERATION':
                     enums = get_enums_from_object(ifc_object, text0)
                     combo = QComboBox(widget)
@@ -715,6 +717,8 @@ class QCustomDelegate(QItemDelegate):
                     print("Attribute", att_index, "current:", att_value, "new:", att_new_value)
                     if att_value != att_new_value and hasattr(ifc_object, att_name):
                         try:
+                            if att_type == 'ENTITY INSTANCE':
+                                print('Can not set instance from string')
                             if att_type == 'INT':
                                 setattr(ifc_object, att_name, int(att_new_value))
                             if att_type == 'DOUBLE':
@@ -763,7 +767,7 @@ class QCustomDelegate(QItemDelegate):
                 if text0 != 'GlobalId' and text2 in ['STRING', 'DOUBLE', 'ENUMERATION', 'INT', 'BOOL']:
                     # add a greenish background color to indicate editable cells
                     painter.fillRect(styleoptions.rect, QColor(191, 222, 185, 30))
-                elif ifc_object.is_a('IfcPropertySingleValue'):
+                elif text2 not in ['ENTITY INSTANCE'] and ifc_object.is_a('IfcPropertySingleValue'):
                     painter.fillRect(styleoptions.rect, QColor(191, 185, 222, 30))
 
         # But also do the regular paint

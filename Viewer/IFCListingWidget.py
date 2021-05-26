@@ -128,6 +128,9 @@ class HeaderEditor(QWidget):
         remove.setToolTip("Remove selected Header Item")
         remove.clicked.connect(self.remove_item)
         hbox.addWidget(remove)
+        # Stretchable Spacer
+        spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
+        hbox.addSpacerItem(spacer)
 
         # List of Strings
         self.label_list = QListWidget()
