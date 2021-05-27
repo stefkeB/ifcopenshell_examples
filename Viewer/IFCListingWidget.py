@@ -183,6 +183,7 @@ class IFCListingWidget(QWidget):
     """
     Fifth version of the IFC Tree Widget/View
     - V1 = Take off Table + Takeoff Button + CSV export + Header Editor
+    - V2 = From Table Widget to Table View
     """
     def __init__(self):
         QWidget.__init__(self)
@@ -246,7 +247,9 @@ class IFCListingWidget(QWidget):
         hbox.addWidget(default)
 
         # Listing Widget
-        self.object_table = QTableWidget()
+        self.object_table = QTableView()
+        self.model = None
+        # TODO: reuse (after restructuring) the Custom Delegate for the Property Editor
         vbox.addWidget(self.object_table)
         self.default_header()
 
@@ -255,11 +258,12 @@ class IFCListingWidget(QWidget):
         self.reset()
 
     def reset(self):
-        self.object_table.clear()
-        model = self.object_table.model()
-        model.removeRows(0, model.rowCount())
-        self.object_table.setColumnCount(len(self.header))
-        self.object_table.setHorizontalHeaderLabels(self.header)
+        if self.model is not None:
+            self.model.clear()
+        self.model = QStandardItemModel(0, len(self.header), self)
+        self.object_table.setModel(self.model)
+        for c, h in enumerate(self.header):
+            self.model.setHeaderData(c, Qt.Horizontal, h)
 
     def edit(self):
         # open a dialog with a StringList edit widget
@@ -279,14 +283,15 @@ class IFCListingWidget(QWidget):
             qto_writer.writerow(self.header)
 
             # take off if not done already
-            if self.object_table.rowCount() == 0:
+            if self.model.rowCount() == 0:
                 self.take_off()
             # export table to CSV
-            for r in range(self.object_table.rowCount()):
+            for r in range(self.model.rowCount()):
                 record = []
-                for c in range(self.object_table.columnCount()):
-                    item = self.object_table.item(r, c)
-                    record.append(item.text())
+                for c in range(self.model.columnCount()):
+                    index = self.model.index(r, c)
+                    item_data = index.data(Qt.DisplayRole)
+                    record.append(str(item_data))
                 qto_writer.writerow(record)
             csv_file.close()
 
@@ -305,8 +310,9 @@ class IFCListingWidget(QWidget):
                       "NetSideArea", "GrossArea", "NetArea", "GrossVolume", "NetVolume"]
         # concatenate
         self.header.extend(attributes + properties + quantities)
-        self.object_table.setColumnCount(len(self.header))
-        self.object_table.setHorizontalHeaderLabels(self.header)
+        self.reset()
+        # self.object_table.setColumnCount(len(self.header))
+        # self.object_table.setHorizontalHeaderLabels(self.header)
 
     def toggle_chooser(self, text):
         self.root_class = self.root_class_chooser.currentText()
@@ -338,14 +344,14 @@ class IFCListingWidget(QWidget):
             for item in items:
                 record = takeoff_element(item, self.header)
                 # add an empty row
-                row = self.object_table.rowCount()
-                self.object_table.insertRow(row)
+                row = []
                 for column, cell in enumerate(record):
-                    new_item = QTableWidgetItem(cell)
-                    new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)
-                    new_item.setData(Qt.UserRole, item)
+                    new_item = QStandardItem(cell)
+                    # new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)
+                    new_item.setData(item, Qt.UserRole)
                     new_item.setToolTip('#' + str(item.id()))
-                    self.object_table.setItem(row, column, new_item)
+                    row.append(new_item)
+                self.model.appendRow(row)
 
     def load_file(self, filename):
         """
