@@ -15,6 +15,7 @@ import ifcopenshell
 
 # region Utility Functions
 
+
 def get_type_name(element):
     """Retrieve name of the relating Type"""
     if hasattr(element, 'IsDefinedBy') is False:
@@ -265,6 +266,11 @@ class IFCListingWidget(QWidget):
         for c, h in enumerate(self.header):
             self.model.setHeaderData(c, Qt.Horizontal, h)
 
+        self.object_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.object_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.object_table.selectionModel().selectionChanged.connect(self.send_selection)
+
+
     def edit(self):
         # open a dialog with a StringList edit widget
         if self.header_editor is None:
@@ -350,6 +356,60 @@ class IFCListingWidget(QWidget):
                     new_item.setToolTip('#' + str(item.id()))
                     row.append(new_item)
                 self.model.appendRow(row)
+
+    # region Selection Methods
+
+    select_object = pyqtSignal(object)
+    deselect_object = pyqtSignal(object)
+    send_selection_set = pyqtSignal(object)
+
+    def send_selection(self, selected_items, deselected_items):
+        # selection_model = self.object_table.selectionModel()
+        # items = selection_model.selectedItems()
+        # self.send_selection_set.emit(items)
+        # for item in items:
+        for index in selected_items.indexes():
+            if index.column() == 0:  # only for first column, to avoid repeats
+                entity = index.data(Qt.UserRole)
+                if hasattr(entity, "GlobalId"):
+                    GlobalId = entity.GlobalId
+                    if GlobalId != '':
+                        self.select_object.emit(GlobalId)
+                        print("IFCListingWidget.send_selection.select_object ", GlobalId)
+
+        # send the deselected items as well
+        for index in deselected_items.indexes():
+            if index.column() == 0:  # only for first column, to avoid repeats
+                entity = index.data(Qt.UserRole)
+                if hasattr(entity, "GlobalId"):
+                    GlobalId = entity.GlobalId
+                    if GlobalId != '':
+                        self.deselect_object.emit(GlobalId)
+                        print("IFCListingWidget.send_selection.deselect_object ", GlobalId)
+
+    def receive_selection(self, ids):
+        print("IFCListingWidget.receive_selection ", ids)
+        selection_model = self.object_table.selectionModel()
+        # check if already selected
+        index = selection_model.currentIndex()
+        entity = index.data(Qt.UserRole)
+        if entity is not None and hasattr(entity, "GlobalId"):
+            if entity.GlobalId == ids:
+                return
+        selection_model.clearSelection()
+        if not len(ids):
+            return
+
+        for r in range(self.model.rowCount()):
+            index = self.model.index(r, 0)  # only for first column, to avoid repeats
+            entity = index.data(Qt.UserRole)
+            if entity is not None and hasattr(entity, "GlobalId"):
+                if entity.GlobalId == ids:
+                    self.object_table.selectRow(r)
+                    # selection_model.select(index, QItemSelectionModel.Rows)
+                    self.object_table.scrollTo(index)
+
+    # endregion
 
     def load_file(self, filename):
         """

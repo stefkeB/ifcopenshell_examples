@@ -83,7 +83,16 @@ class QIFCViewer(QMainWindow):
             self.view_tree.select_object.connect(self.view_3d.select_object_by_id)
             self.view_tree.deselect_object.connect(self.view_3d.deselect_object_by_id)
             self.view_3d.add_to_selected_entities.connect(self.view_tree.receive_selection)
+            self.view_3d.add_to_selected_entities.connect(self.view_takeoff.receive_selection)
+            self.view_takeoff.select_object.connect(self.view_3d.select_object_by_id)
+            # self.view_takeoff.deselect_object.connect(self.view_3d.deselect_object_by_id)
+        # from tree to other views
         self.view_tree.send_selection_set.connect(self.view_properties.set_from_selected_items)
+        self.view_tree.select_object.connect(self.view_takeoff.receive_selection)
+        # send from takeoff to other views
+        self.view_takeoff.select_object.connect(self.view_tree.receive_selection)
+        # self.view_takeoff.deselect_object.connect(self.view_tree.receive_selection)
+
         # Update Syncing
         self.view_properties.send_update_object.connect(self.view_tree.receive_object_update)
 
@@ -245,7 +254,7 @@ def main():
     else:
         app = QApplication(sys.argv)
     app.setApplicationDisplayName("IFC Viewer")
-    w = QIFCViewer(use_3d=False)
+    w = QIFCViewer(use_3d=True)
     w.setWindowTitle("IFC Viewer")
     w.resize(1280, 800)
     filename = sys.argv[1]

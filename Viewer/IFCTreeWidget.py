@@ -93,6 +93,8 @@ class IFCTreeWidget(QWidget):
         self.object_tree.itemDoubleClicked.connect(self.check_object_name_edit)
         self.object_tree.itemChanged.connect(self.set_object_name_edit)
 
+    # region Selection Methods
+
     select_object = pyqtSignal(object)
     deselect_object = pyqtSignal(object)
     send_selection_set = pyqtSignal(object)
