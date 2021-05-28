@@ -33,6 +33,10 @@ class SchemaViewer(QWidget):
         self.column_chooser.valueChanged.connect(self.set_columns)
         hbox.addWidget(self.column_chooser)
 
+        # Stretchable Spacer
+        spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
+        hbox.addSpacerItem(spacer)
+
         # Main Tree
         self.object_tree = QTreeWidget()
         vbox.addWidget(self.object_tree)
@@ -85,7 +89,10 @@ class SchemaViewer(QWidget):
             for a in range(e.attribute_count()):
                 attribute = e.attribute_by_index(a)
                 a_name = attribute.name() if hasattr(attribute, 'name') else "<name>"
-                # a_type = attribute.type_of_attribute().declared_type().name() if hasattr(attribute.type_of_attribute(), 'declared_type') else "<type>"
+                a_type = "<type>"
+                if hasattr(attribute.type_of_attribute(), 'declared_type'):
+                    declared_type = attribute.type_of_attribute().declared_type()
+                    a_type = declared_type
                 # a_optional = str(attribute.optional()) if hasattr(attribute, 'optional') else "<optional>"
                 buffer.append(a_name)
                 # child = QTreeWidgetItem([a_name])
