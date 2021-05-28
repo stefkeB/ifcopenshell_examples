@@ -311,8 +311,6 @@ class IFCListingWidget(QWidget):
         # concatenate
         self.header.extend(attributes + properties + quantities)
         self.reset()
-        # self.object_table.setColumnCount(len(self.header))
-        # self.object_table.setHorizontalHeaderLabels(self.header)
 
     def toggle_chooser(self, text):
         self.root_class = self.root_class_chooser.currentText()
@@ -347,7 +345,7 @@ class IFCListingWidget(QWidget):
                 row = []
                 for column, cell in enumerate(record):
                     new_item = QStandardItem(cell)
-                    # new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)
+                    new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)
                     new_item.setData(item, Qt.UserRole)
                     new_item.setToolTip('#' + str(item.id()))
                     row.append(new_item)
