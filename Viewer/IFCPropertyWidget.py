@@ -1,6 +1,6 @@
 import sys
 import os.path
-import re
+# import re
 
 try:
     from PyQt5.QtCore import *
@@ -12,6 +12,7 @@ except Exception:
     from PySide2.QtWidgets import *
 
 import ifcopenshell
+from IFCCustomDelegate import *
 
 
 class IFCPropertyWidget(QWidget):
@@ -25,6 +26,7 @@ class IFCPropertyWidget(QWidget):
     - V4 = Editing Attributes (STRING, DOUBLE, INT and ENUMERATION)
     - V5 = QTreeWidget replaced with QTreeView
     - V6 = Inverse Attributes
+    - V7 = Updated Delegate (shared with other views/widgets)
     """
 
     send_update_object = pyqtSignal(object)
@@ -98,6 +100,7 @@ class IFCPropertyWidget(QWidget):
         # Property Tree
         self.property_tree = QTreeView()
         delegate = QCustomDelegate(self)
+        delegate.set_allowed_column(1)
         delegate.send_update_object.connect(self.send_update_object)  # to warn name changes
         self.property_tree.setItemDelegate(delegate)
         # self.property_tree.setEditTriggers(QAbstractItemView.CurrentChanged)  # open editor upon first click
@@ -149,8 +152,14 @@ class IFCPropertyWidget(QWidget):
         """
         attributes = ifc_object.wrapped_data.get_inverse_attribute_names()
         for att_idx, att_name in enumerate(attributes):
+            att_value = ""  # str(ifc_object[att_idx])
+            att_type = ""  # ifc_object.attribute_type(att_name)
             attribute_item0 = QStandardItem(att_name)
             attribute_item0.setData(ifc_object, Qt.UserRole)  # remember the owner of this attribute
+            attribute_item0.setData(att_name, Qt.UserRole + 1)  # name
+            attribute_item0.setData(att_value, Qt.UserRole + 2)  # value
+            attribute_item0.setData(att_type, Qt.UserRole + 3)  # type
+            attribute_item0.setData(att_idx, Qt.UserRole + 4)  # index
             parent_item.appendRow([attribute_item0])
 
             inv_attribute_tuple = getattr(ifc_object, att_name)
@@ -162,6 +171,10 @@ class IFCPropertyWidget(QWidget):
                     # nested_attribute_item1.setToolTip(att_value)
                     # nested_attribute_item2 = QStandardItem(att_type)
                     # nested_attribute_item1.setData(nested_att, Qt.UserRole)  # remember the owner of this attribute
+                    # nested_attribute_item0.setData('', Qt.UserRole + 1)  # name
+                    # nested_attribute_item0.setData('', Qt.UserRole + 2)  # value
+                    # nested_attribute_item0.setData(att_class, Qt.UserRole + 3)  # type
+                    # nested_attribute_item0.setData(i, Qt.UserRole + 4)  # index
                     attribute_item0.appendRow([nested_attribute_item0, nested_attribute_item1])
                     self.add_attributes_in_tree(nested_att, nested_attribute_item0)
 
@@ -180,14 +193,18 @@ class IFCPropertyWidget(QWidget):
             # https://github.com/jakob-beetz/IfcOpenShellScriptingTutorial/wiki/02:-Inspecting-IFC-instance-objects
             att_name = ifc_object.attribute_name(att_idx)
             att_value = str(ifc_object[att_idx])
-            att_type = ifc_object.attribute_type(att_name)
+            att_type = ifc_object.attribute_type(att_idx)
             if not self.show_all and (att_type == ('ENTITY INSTANCE' or 'AGGREGATE OF ENTITY INSTANCE')):
                 att_value = ''
             attribute_item0 = QStandardItem(att_name)
             attribute_item1 = QStandardItem(att_value)
             attribute_item1.setToolTip(att_value)
-            attribute_item2 = QStandardItem(att_type)
             attribute_item1.setData(ifc_object, Qt.UserRole)  # remember the owner of this attribute
+            attribute_item1.setData(att_name, Qt.UserRole + 1)  # name
+            attribute_item1.setData(att_value, Qt.UserRole + 2)  # value
+            attribute_item1.setData(att_type, Qt.UserRole + 3)  # type
+            attribute_item1.setData(att_idx, Qt.UserRole + 4)  # index
+            attribute_item2 = QStandardItem(att_type)
             if att_type in ['STRING', 'DOUBLE', 'INT', 'ENUMERATION']:
                 attribute_item1.setEditable(True)
             if att_type == 'ENUMERATION':
@@ -214,6 +231,10 @@ class IFCPropertyWidget(QWidget):
                         nested_item1 = QStandardItem(str(value))
                         nested_item2 = QStandardItem("DOUBLE")
                         # nested_item1.setData(nested_entity, Qt.UserRole)  # remember the owner of this attribute
+                        # nested_item1.setData(att_name, Qt.UserRole + 1)  # name
+                        # nested_item1.setData(att_value, Qt.UserRole + 2)  # value
+                        # nested_item1.setData(att_type, Qt.UserRole + 3)  # type
+                        # nested_item1.setData(att_idx, Qt.UserRole + 4)  # index
                         attribute_item0.appendRow([nested_item0, nested_item1, nested_item2])
                 if att_type == 'AGGREGATE OF ENTITY INSTANCE':
                     attribute_item0.setText(attribute_item0.text() + ' [' + str(len(attribute)) + ']')
@@ -222,6 +243,10 @@ class IFCPropertyWidget(QWidget):
                         nested_item1 = QStandardItem(get_friendly_ifc_name(nested_entity))
                         nested_item2 = QStandardItem("#" + str(nested_entity.id()))
                         nested_item1.setData(nested_entity, Qt.UserRole)  # remember the owner of this attribute
+                        # nested_item1.setData(att_name, Qt.UserRole + 1)  # name
+                        # nested_item1.setData(att_value, Qt.UserRole + 2)  # value
+                        # nested_item1.setData(att_type, Qt.UserRole + 3)  # type
+                        # nested_item1.setData(att_idx, Qt.UserRole + 4)  # index
                         attribute_item0.appendRow([nested_item0, nested_item1, nested_item2])
                         try:
                             self.add_attributes_in_tree(nested_entity, nested_item0,
@@ -237,7 +262,7 @@ class IFCPropertyWidget(QWidget):
         :param property_set: IfcPropertySet containing individual properties
         :param parent_item: QStandardItem used to put properties underneath
         """
-        for prop in property_set.HasProperties:
+        for index, prop in enumerate(property_set.HasProperties):
             if self.show_all:
                 self.add_attributes_in_tree(prop, parent_item)
             else:
@@ -248,25 +273,42 @@ class IFCPropertyWidget(QWidget):
                     prop_item0 = QStandardItem(prop.Name)
                     prop_item1 = QStandardItem(prop_value)
                     prop_item2 = QStandardItem(unit)
-                    prop_item1.setData(prop, Qt.UserRole)
+                    prop_item1.setData(prop, Qt.UserRole)  # object
+                    prop_item1.setData(prop.Name, Qt.UserRole + 1)  # name
+                    prop_item1.setData(prop_value, Qt.UserRole + 2)  # value
+                    prop_item1.setData(unit, Qt.UserRole + 3)  # type
+                    prop_item1.setData(index, Qt.UserRole + 4)  # index
+                    prop_item1.setData(prop, Qt.UserRole + 5)  # sub_object
                     parent_item.appendRow([prop_item0, prop_item1, prop_item2])
                 elif prop.is_a('IfcComplexProperty'):
                     property_item0 = QStandardItem(prop.Name)
                     # property_item1 = QStandardItem('')
                     property_item2 = QStandardItem(unit)
                     parent_item.appendRow([property_item0, None, property_item2])
-                    for nested_prop in prop.HasProperties:
+                    for nested_index, nested_prop in enumerate(prop.HasProperties):
+                        nested_name = nested_prop.Name
+                        nested_value = str(nested_prop.NominalValue.wrappedValue)
                         nested_unit = str(nested_prop.Unit) if hasattr(nested_prop, 'Unit') else ''
-                        prop_nested_item0 = QStandardItem(nested_prop.Name)
-                        prop_nested_item1 = QStandardItem(str(nested_prop.NominalValue.wrappedValue))
+                        prop_nested_item0 = QStandardItem(nested_name)
+                        prop_nested_item1 = QStandardItem(nested_value)
                         prop_nested_item2 = QStandardItem(nested_unit)
-                        prop_nested_item1.setData(nested_prop, Qt.UserRole)
+                        prop_nested_item1.setData(nested_prop, Qt.UserRole)  # object
+                        prop_nested_item1.setData(nested_name, Qt.UserRole + 1)  # name
+                        prop_nested_item1.setData(nested_value, Qt.UserRole + 2)  # value
+                        prop_nested_item1.setData(nested_unit, Qt.UserRole + 3)  # type
+                        prop_nested_item1.setData(nested_index, Qt.UserRole + 4)  # index
+                        prop_nested_item1.setData(nested_prop, Qt.UserRole + 5)  # sub_object
                         property_item0.appendRow([prop_nested_item0, prop_nested_item1, prop_nested_item2])
                 else:
                     property_item0 = QStandardItem(prop.Name)
-                    property_item1 = QStandardItem('<not handled>')
+                    property_item1 = QStandardItem(prop_value)
                     property_item2 = QStandardItem(unit)
                     property_item1.setData(prop, Qt.UserRole)
+                    property_item1.setData(prop.Name, Qt.UserRole + 1)  # name
+                    property_item1.setData(prop_value, Qt.UserRole + 2)  # value
+                    property_item1.setData(unit, Qt.UserRole + 3)  # type
+                    property_item1.setData(index, Qt.UserRole + 4)  # index
+                    property_item1.setData(prop, Qt.UserRole + 5)  # sub_object
                     parent_item.appendRow([property_item0, property_item1, property_item2])
 
     def add_quantities_in_tree(self, quantity_set, parent_item):
@@ -274,7 +316,7 @@ class IFCPropertyWidget(QWidget):
         Fill the property tree with the quantities
 
         :param quantity_set: IfcQuantitySet containing individual quantities
-        :param parent_item: QTreeWidgetItem used to put quantities underneath
+        :param parent_item: QStandardItem used to put quantities underneath
         """
         for quantity in quantity_set.Quantities:
             if self.show_all:
@@ -353,7 +395,6 @@ class IFCPropertyWidget(QWidget):
 
         # Attributes
         if self.follow_attributes:
-            # my_id = ifc_object.GlobalId if hasattr(ifc_object, "GlobalId") else str("#{}").format(ifc_object.id())
             attributes_item0 = QStandardItem("Attributes [" + str(len(ifc_object)) + "]")
             attributes_item1 = QStandardItem(get_friendly_ifc_name(ifc_object))
             self.model.invisibleRootItem().appendRow([attributes_item0, attributes_item1])
@@ -378,6 +419,11 @@ class IFCPropertyWidget(QWidget):
                 ass_name = assignment.Name if assignment.Name is not None else '[' + str(counter) + ']'
                 ass_item0 = QStandardItem(ass_name)
                 ass_item0.setData(assignment, Qt.UserRole)
+                # att_name  = index.data(Qt.UserRole + 1)
+                # att_value = index.data(Qt.UserRole + 2)
+                # att_type  = index.data(Qt.UserRole + 3)
+                # att_index = index.data(Qt.UserRole + 4)
+                # sub_object = index.data(Qt.UserRole + 5)
                 ass_item1 = QStandardItem(get_friendly_ifc_name(assignment))
                 ass_item2 = QStandardItem(assignment.GlobalId)
                 assignments_item0.appendRow([ass_item0, ass_item1, ass_item2])
@@ -400,6 +446,11 @@ class IFCPropertyWidget(QWidget):
                 def_name = definition.Name if definition.Name is not None else '[' + str(counter) + ']'
                 def_item0 = QStandardItem(def_name)
                 def_item0.setData(definition, Qt.UserRole)
+                # att_name  = index.data(Qt.UserRole + 1)
+                # att_value = index.data(Qt.UserRole + 2)
+                # att_type  = index.data(Qt.UserRole + 3)
+                # att_index = index.data(Qt.UserRole + 4)
+                # sub_object = index.data(Qt.UserRole + 5)
                 def_item1 = QStandardItem(get_friendly_ifc_name(definition))
                 def_item2 = QStandardItem(definition.GlobalId)
                 item0.appendRow([def_item0, def_item1, def_item2])
@@ -417,6 +468,10 @@ class IFCPropertyWidget(QWidget):
                     s = get_friendly_ifc_name(type_object)
                     type_item0 = QStandardItem(type_object.Name)
                     type_item0.setData(type_item0, Qt.UserRole)
+                    # att_name  = index.data(Qt.UserRole + 1)
+                    # att_value = index.data(Qt.UserRole + 2)
+                    # att_type  = index.data(Qt.UserRole + 3)
+                    # att_index = index.data(Qt.UserRole + 4)
                     type_item1 = QStandardItem(s)
                     type_item2 = QStandardItem(type_object.GlobalId)
                     type_item0.setData(type_object, Qt.UserRole)
@@ -425,6 +480,10 @@ class IFCPropertyWidget(QWidget):
                     property_set = definition.RelatingPropertyDefinition
                     prop_item0 = QStandardItem(property_set.Name)
                     prop_item0.setData(property_set, Qt.UserRole)
+                    # att_name  = index.data(Qt.UserRole + 1)
+                    # att_value = index.data(Qt.UserRole + 2)
+                    # att_type  = index.data(Qt.UserRole + 3)
+                    # att_index = index.data(Qt.UserRole + 4)
                     prop_item1 = QStandardItem(get_friendly_ifc_name(property_set))
                     prop_item2 = QStandardItem(property_set.GlobalId)
                     defines_item0.appendRow([prop_item0, prop_item1, prop_item2])
@@ -442,6 +501,10 @@ class IFCPropertyWidget(QWidget):
             for association in ifc_object.HasAssociations:
                 def_item0 = QStandardItem(association.Name)
                 def_item0.setData(association, Qt.UserRole)
+                # att_name  = index.data(Qt.UserRole + 1)
+                # att_value = index.data(Qt.UserRole + 2)
+                # att_type  = index.data(Qt.UserRole + 3)
+                # att_index = index.data(Qt.UserRole + 4)
                 def_item1 = QStandardItem(get_friendly_ifc_name(association))
                 def_item2 = QStandardItem(association.GlobalId)
                 item0.appendRow([def_item0, def_item1, def_item2])
@@ -541,239 +604,6 @@ class IFCPropertyWidget(QWidget):
 
     # endregion
 
-
-# region Separate Methods
-
-def get_enums_from_object(ifc_object, att_name):
-    """
-    Check the schema to get the list of enumerations
-    for one particular attribute of a class.
-
-    As we don't know the schema from the object (or do we?)
-    we try both the IFC2x3 and IFC4 schemes.
-
-    :param ifc_object: instance of an IFC object
-    :type ifc_object: entity_instance
-    :param att_name: name of the attribute
-    :type att_name: str
-    """
-    if hasattr(ifc_object, att_name):
-        att_index = ifc_object.wrapped_data.get_argument_index(att_name)
-        # att_value = ifc_object.wrapped_data.get_argument(att_index)
-        # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
-        att_type = ifc_object.attribute_type(att_index)
-        if att_type == 'ENUMERATION':
-            try:
-                schema = ifcopenshell.ifcopenshell_wrapper.schema_by_name('IFC2x3')
-                e_class = schema.declaration_by_name(ifc_object.is_a())
-                attribute = e_class.attribute_by_index(att_index)
-                return attribute.type_of_attribute().declared_type().enumeration_items()
-            except:
-                pass
-            try:
-                schema = ifcopenshell.ifcopenshell_wrapper.schema_by_name('IFC4')
-                e_class = schema.declaration_by_name(ifc_object.is_a())
-                attribute = e_class.attribute_by_index(att_index)
-                return attribute.type_of_attribute().declared_type().enumeration_items()
-            except:
-                pass
-
-
-def camel_case_split(string):
-    return re.findall(r'[A-Z](?:[a-z]+|[A-Z]*(?=[A-Z]|$))', string)
-
-
-def get_friendly_ifc_name(ifc_object):
-    # Trick to split the IfcClass into separate words
-    s = ' '.join(camel_case_split(str(ifc_object.is_a())))
-    s = s[4:]
-    return s
-
-# endregion
-
-# region Delegates & Editing
-
-
-class QCustomDelegate(QItemDelegate):
-    # https://stackoverflow.com/questions/41207485/how-to-create-combo-box-qitemdelegate
-    # https://stackoverflow.com/questions/18068439/pyqt-simplest-working-example-of-a-combobox-inside-qtableview
-
-    send_update_object = pyqtSignal(object)
-
-    def __init__(self, parent):
-        QItemDelegate.__init__(self, parent)
-
-    def createEditor(self, widget, option, index):
-        """
-        Create a Combobox for enumerations
-        Create a LineEdit for strings and double
-        Create a Spinbox for integers
-        Create a Checkbox for Bool
-        But do nothing for other data types
-        """
-        model = index.model()
-        row = index.row()
-        column = index.column()
-        parent = index.parent()
-        if column == 1:
-            text0 = model.index(row, 0, parent).data(Qt.DisplayRole)
-            text1 = index.data(Qt.DisplayRole)
-            text2 = model.index(row, 2, parent).data(Qt.DisplayRole)
-            ifc_object = index.data(Qt.UserRole)
-            if ifc_object is not None and text1 != 'GlobalId':
-                if text2 == 'ENTITY INSTANCE':
-                    return None
-                if text2 == 'ENUMERATION':
-                    enums = get_enums_from_object(ifc_object, text0)
-                    combo = QComboBox(widget)
-                    combo.setAutoFillBackground(True)
-                    combo.addItems(enums)
-                    combo.setCurrentText(text1)
-                    return combo
-                if text2 in ['INT']:
-                    spin = QSpinBox(widget)
-                    spin.setValue(int(text1))
-                    return spin
-                if text2 in ['BOOL']:
-                    check = QCheckBox(widget)
-                    check.setText(text0)
-                    check.setAutoFillBackground(True)
-                    check.setChecked(bool(text1))
-                    return check
-                if text2 in ['DOUBLE', 'STRING']:
-                    return QItemDelegate.createEditor(self, widget, option, index)  # default = QLineEdit
-                else:
-                    # Check Properties (even if we don't know the unit...)
-                    if ifc_object.is_a('IfcPropertySingleValue'):
-                        return QItemDelegate.createEditor(self, widget, option, index)  # default
-
-                    return None
-                    # return QItemDelegate.createEditor(self, widget, option, index)  # default
-        return None
-
-    def setModelData(self, editor, model, index):
-        """This is the data stored into the field"""
-        if isinstance(editor, QComboBox):
-            model.setData(index, editor.itemText(editor.currentIndex()))
-        if isinstance(editor, QLineEdit):
-            model.setData(index, editor.text())
-        if isinstance(editor, QSpinBox):
-            model.setData(index, editor.value())
-        if isinstance(editor, QCheckBox):
-            model.setData(index, editor.isChecked())
-
-        row = index.row()
-        column = index.column()
-        parent = index.parent()
-        if column == 1:
-            text0 = model.index(row, 0, parent).data(Qt.DisplayRole)
-            text1 = index.data(Qt.DisplayRole)
-            parenttext = model.index(row, 1, parent).data(Qt.DisplayRole)
-            text2 = model.index(row, 2, parent).data(Qt.DisplayRole)
-            ifc_object = index.data(Qt.UserRole)
-            if ifc_object is not None:
-                # regular attributes > based on attribute index
-                # PropertySingleValue > wrapped value
-                if ifc_object.is_a('IfcPropertySingleValue') and text2 == 'None':
-                    # TODO: conflict when showing properties as attributes
-                    att_name = text0
-                    att_index = 3
-                    att_type = ifc_object.attribute_type(att_index)
-                    att_value = ifc_object.NominalValue.wrappedValue
-                    try:
-                        attribute = ifc_object.wrapped_data.get_argument('NominalValue')
-                        # attribute = getattr(ifc_object, 'NominalValue')
-                        if str(text1) == '':
-                            # attribute.setArgumentAsNull(0)  # crashes?
-                            ifc_object.setArgumentAsNull(3)
-                        else:
-                            if attribute.is_a('IfcAreaMeasure') or attribute.is_a('IfcLengthMeasure')\
-                                    or attribute.is_a('IfcVolumeMeasure'):
-                                attribute.setArgumentAsDouble(0, float(text1))
-                            elif attribute.is_a('IfcText'):
-                                attribute.setArgumentAsString(0, str(text1))
-                            elif attribute.is_a('IfcBoolean'):
-                                attribute.setArgumentAsString(0, bool(text1))
-                            else:
-                                setattr(attribute, 'wrappedValue', text1)
-                                pass
-                                attribute.setArgumentAsBool(0, float(text1))
-                                attribute.setArgumentAsNull(0)
-                            model.setData(index, text1)
-
-                    except:
-                        print("Could not set Attribute :", text0, " with value ", text1)
-                        print("So we reset it to ", str(ifc_object.NominalValue.wrappedValue))
-                        model.setData(index, str(att_value))
-                        pass
-                else:
-                    att_name = text0
-                    att_index = ifc_object.wrapped_data.get_argument_index(att_name)
-                    att_value = ifc_object.wrapped_data.get_argument(att_index)
-                    # att_type = ifc_object.wrapped_data.get_argument_type(att_index)
-                    att_type = ifc_object.attribute_type(att_index)
-                    att_new_value = text1
-
-                    print("Attribute", att_index, "current:", att_value, "new:", att_new_value)
-                    if att_value != att_new_value and hasattr(ifc_object, att_name):
-                        try:
-                            if att_type == 'ENTITY INSTANCE':
-                                print('Can not set instance from string')
-                            if att_type == 'INT':
-                                setattr(ifc_object, att_name, int(att_new_value))
-                            if att_type == 'DOUBLE':
-                                setattr(ifc_object, att_name, float(att_new_value))
-                            if att_type == 'BOOL':
-                                setattr(ifc_object, att_name, bool(att_new_value))
-                            if att_type == 'ENUMERATION':
-                                enum = get_enums_from_object(ifc_object, att_name)
-                                if att_new_value in enum:
-                                    print('Valid enum value')
-                                    setattr(ifc_object, att_name, att_new_value)
-                                else:
-                                    print('Invalid enum value')
-                                    model.setData(index, str(att_value))
-                            if att_type == 'STRING':
-                                setattr(ifc_object, att_name, att_new_value)
-                        except:
-                            print("Could not set Attribute :", att_name, " with value ", att_new_value)
-                            print("So we reset it to ", att_value)
-                            model.setData(index, str(att_value))
-                            pass
-                        # Warn other views, but only needed if Name is changed
-                        if att_name == "Name":
-                            self.send_update_object.emit(ifc_object)
-                            pass
-
-        else:
-            QItemDelegate.setModelData(self, editor, model, index)
-
-    def updateEditorGeometry(self, editor, option, index):
-        editor.setGeometry(option.rect)
-
-    def paint(self, painter, styleoptions, index):
-        """
-        Add a greenish background color to indicate editable cells
-        """
-        model = index.model()
-        row = index.row()
-        column = index.column()
-        parent = index.parent()
-        if column == 1:
-            text0 = model.index(row, 0, parent).data(Qt.DisplayRole)
-            text2 = model.index(row, 2, parent).data(Qt.DisplayRole)
-            ifc_object = index.data(Qt.UserRole)
-            if ifc_object is not None:
-                if text0 != 'GlobalId' and text2 in ['STRING', 'DOUBLE', 'ENUMERATION', 'INT', 'BOOL']:
-                    # add a greenish background color to indicate editable cells
-                    painter.fillRect(styleoptions.rect, QColor(191, 222, 185, 30))
-                elif text2 not in ['ENTITY INSTANCE'] and ifc_object.is_a('IfcPropertySingleValue'):
-                    painter.fillRect(styleoptions.rect, QColor(191, 185, 222, 30))
-
-        # But also do the regular paint
-        QItemDelegate.paint(self, painter, styleoptions, index)
-
-# endregion
 
 if __name__ == '__main__':
     app = 0

@@ -12,84 +12,125 @@ except Exception:
     from PySide2.QtWidgets import *
 
 import ifcopenshell
+from IFCCustomDelegate import *
 
 # region Utility Functions
 
 
 def get_type_name(element):
     """Retrieve name of the relating Type"""
+    result = {}
     if hasattr(element, 'IsDefinedBy') is False:
-        return None
+        return result
 
     for definition in element.IsDefinedBy:
         if definition.is_a('IfcRelDefinesByType'):
-            return definition.RelatingType.Name
+            relating_type = definition.RelatingType
+            # result['ifc_object'] = element
+            result['ifc_sub_object'] = relating_type
+            # result['att_name'] = 'Name'
+            result['att_value'] = relating_type.Name
+            result['att_type'] = relating_type.attribute_type(2)
+            result['att_idx'] = 2
+            result['IsEditable'] = True
+            return result
 
 
 def get_attribute_by_name(element, attribute_name):
     """simple function to return the string value of an attribute"""
+    result = {}
+    # result['ifc_object'] = element
+    result['ifc_sub_object'] = element
+    # result['att_name'] = attribute_name
+    result['IsEditable'] = False
     # exceptions for id, class, type
     if attribute_name == "id":
-        return str(element.id())
+        # att = getattr(element, 'id')
+        result['att_value'] = element.id()
+        return result  # str(element.id()), element
     elif attribute_name == "class":
-        return element.is_a()
+        result['att_value'] = element.is_a()
+        return result
     elif attribute_name == "type":
         return get_type_name(element)
 
     for att_idx in range(0, len(element)):
-        # https://github.com/jakob-beetz/IfcOpenShellScriptingTutorial/wiki/02:-Inspecting-IFC-instance-objects
         att_name = element.attribute_name(att_idx)
         if att_name == attribute_name:
             try:
-                return str(element.wrap_value(element.wrapped_data.get_argument(att_name)))
+                att = element[att_idx]
+                # att = element.wrapped_data.get_argument(att_name)
+                result['att_value'] = str(element.wrap_value(att))
+                result['att_type'] = element.attribute_type(att_idx)
+                result['att_idx'] = att_idx
+                result['IsEditable'] = True
+                return result
             except:
-                return None
+                return result
 
 
 def get_property_or_quantity_by_name(element, prop_or_quantity_name):
     """simple function to return the string value of a property or quantity"""
+    result = {}
+    # result['object'] = element
+    # result['att_name'] = prop_or_quantity_name
+    result['IsEditable'] = False
     if hasattr(element, 'IsDefinedBy') is False:
-        return None
+        return result
 
+    # result['ifc_sub_object'] = element
     for definition in element.IsDefinedBy:
         if definition.is_a('IfcRelDefinesByProperties'):
             if hasattr(definition.RelatingPropertyDefinition, "HasProperties"):
                 for prop in definition.RelatingPropertyDefinition.HasProperties:
                     if prop.Name == prop_or_quantity_name and prop.is_a('IfcPropertySingleValue'):
-                        return str(prop.NominalValue.wrappedValue)
+                        result['ifc_sub_object'] = prop
+                        result['att_value'] = prop.NominalValue.wrappedValue
+                        result['att_type'] = prop.attribute_type(2)
+                        result['att_idx'] = 2  # NominalValue
+                        result['IsEditable'] = True
+                        return result  # str(prop.NominalValue.wrappedValue), prop
             if hasattr(definition.RelatingPropertyDefinition, "Quantities"):
                 for quantity in definition.RelatingPropertyDefinition.Quantities:
                     if quantity.Name == prop_or_quantity_name:
+                        result['ifc_sub_object'] = quantity
+                        result['att_type'] = quantity.attribute_type(3)
+                        result['att_idx'] = 3  # Quantity Value
+                        result['IsEditable'] = False
                         if quantity.is_a('IfcQuantityLength'):
-                            return str(quantity.LengthValue)
+                            result['att_value'] = quantity.LengthValue
+                            return result
                         elif quantity.is_a('IfcQuantityArea'):
-                            return str(quantity.AreaValue)
+                            result['att_value'] = quantity.AreaValue
+                            return result
                         elif quantity.is_a('IfcQuantityVolume'):
-                            return str(quantity.VolumeValue)
+                            result['att_value'] = quantity.VolumeValue
+                            return result
                         elif quantity.is_a('IfcQuantityCount'):
-                            return str(quantity.CountValue)
+                            result['att_value'] = quantity.CountValue
+                            return result
                         else:
-                            return None
+                            return result
 
 
 def takeoff_element(element, header):
     """
     Take off element attributes, properties or quantities, from a given header.
-    Use the exact name (e.g., "GlobalId" for the GUID).
+    Use the exact name (e.g., "GlobalId" for the GUID, "Name", "Description").
 
     You can also state "id" for the STEP-ID, "class" to get the IFC entity class
     and "type" to get the name of a linked type.
 
     :param element: IFC Entity Reference
     :param header: list of strings to indicate attribute, property or quantity
-    :return: List of strings with the actual values
+    :return: List of dicts with the actual values
     """
     columns = []
-    for column in header:
+    for search_value in header:
         # first try if it is an attribute
-        result = get_attribute_by_name(element, column)
+        result = get_attribute_by_name(element, search_value)
         if result is None:  # maybe it is a property or quantity
-            result = get_property_or_quantity_by_name(element, column)
+            result = get_property_or_quantity_by_name(element, search_value)
         columns.append(result)
     return columns
 
@@ -185,6 +226,7 @@ class IFCListingWidget(QWidget):
     Fifth version of the IFC Tree Widget/View
     - V1 = Take off Table + Takeoff Button + CSV export + Header Editor
     - V2 = From Table Widget to Table View
+    - V3 = Metadata into Takeoff Item to support editing with Delegate
     """
     def __init__(self):
         QWidget.__init__(self)
@@ -250,9 +292,26 @@ class IFCListingWidget(QWidget):
         # Listing Widget
         self.object_table = QTableView()
         self.model = None
-        # TODO: reuse (after restructuring) the Custom Delegate for the Property Editor
+        delegate = QCustomDelegate(self)
+        self.object_table.setItemDelegate(delegate)
         vbox.addWidget(self.object_table)
         self.default_header()
+
+    #region Files & UI methods
+
+    def load_file(self, filename):
+        """
+        Load the IFC file passed as filename.
+
+        :param filename: Full path to the IFC file
+        :type filename: str
+        """
+        ifc_file = None
+        if filename in self.ifc_files:
+            ifc_file = self.ifc_files[filename]
+        else:  # Load as new file
+            ifc_file = ifcopenshell.open(filename)
+            self.ifc_files[filename] = ifc_file
 
     def close_files(self):
         self.ifc_files.clear()
@@ -269,7 +328,6 @@ class IFCListingWidget(QWidget):
         self.object_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.object_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.object_table.selectionModel().selectionChanged.connect(self.send_selection)
-
 
     def edit(self):
         # open a dialog with a StringList edit widget
@@ -322,6 +380,10 @@ class IFCListingWidget(QWidget):
         self.root_class = self.root_class_chooser.currentText()
         self.reset()
 
+    # endregion
+
+    # region Take Off
+
     def take_off(self):
         self.reset()
         if len(self.header) == 0:
@@ -345,17 +407,50 @@ class IFCListingWidget(QWidget):
                 self.root_class = 'IfcElement'
                 self.root_class_chooser.setCurrentText(self.root_class)
                 return
-            for item in items:
-                record = takeoff_element(item, self.header)
+            for ifc_object in items:
+                record = takeoff_element(ifc_object, self.header)
                 # add an empty row
                 row = []
+                # and fill it with QStandardItems
                 for column, cell in enumerate(record):
-                    new_item = QStandardItem(cell)
-                    new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)
-                    new_item.setData(item, Qt.UserRole)
-                    new_item.setToolTip('#' + str(item.id()))
-                    row.append(new_item)
+                    if cell is not None:
+                        # we receive a Dict with all required metadata
+                        # but some keys may not exist!
+                        # ifc_object = cell['ifc_object']
+                        ifc_sub_object = cell['ifc_sub_object'] if 'ifc_sub_object' in cell.keys() else None
+                        att_name = self.header[column]  # cell['att_name']
+                        att_value = cell['att_value'] if 'att_value' in cell.keys() else None
+                        att_type = cell['att_type'] if 'att_type' in cell.keys() else None
+                        att_idx = cell['att_idx'] if 'att_idx' in cell.keys() else None
+                        if ifc_sub_object is not None and att_idx != '' and att_idx is not None:
+                            att_name = ifc_sub_object.attribute_name(int(att_idx))
+                        editable = cell['IsEditable'] if 'IsEditable' in cell.keys() else False
+
+                        new_item = QStandardItem(str(att_value))
+                        if not editable:
+                            new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)  # make uneditable
+                        else:
+                            new_item.setFlags(new_item.flags() | Qt.ItemIsEditable)  # make editable
+                        new_item.setData(ifc_object, Qt.UserRole)
+                        new_item.setData(att_name, Qt.UserRole + 1)  # name
+                        new_item.setData(att_value, Qt.UserRole + 2)  # value
+                        new_item.setData(att_type, Qt.UserRole + 3)  # type
+                        new_item.setData(att_idx, Qt.UserRole + 4)  # index
+                        new_item.setData(ifc_sub_object, Qt.UserRole + 5)  # sub object
+                        buffer = "ifc_object:\t#" + str(ifc_object.id())
+                        buffer += "\natt_name:\t" + str(att_name)
+                        buffer += "\natt_value:\t" + str(att_value)
+                        buffer += "\natt_type:\t" + str(att_type)
+                        buffer += "\natt_idx:\t\t" + str(att_idx)
+                        new_item.setToolTip(entity_summary(ifc_object))
+                        if column != 0:
+                            new_item.setToolTip(buffer)
+                        row.append(new_item)
+                    else:
+                        row.append(QStandardItem())
                 self.model.appendRow(row)
+
+    # endregion
 
     # region Selection Methods
 
@@ -411,22 +506,8 @@ class IFCListingWidget(QWidget):
 
     # endregion
 
-    def load_file(self, filename):
-        """
-        Load the IFC file passed as filename.
-
-        :param filename: Full path to the IFC file
-        :type filename: str
-        """
-        ifc_file = None
-        if filename in self.ifc_files:
-            ifc_file = self.ifc_files[filename]
-        else:  # Load as new file
-            ifc_file = ifcopenshell.open(filename)
-            self.ifc_files[filename] = ifc_file
-
-
 # endregion
+
 
 if __name__ == '__main__':
     app = 0

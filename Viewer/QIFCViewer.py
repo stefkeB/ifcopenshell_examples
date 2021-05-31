@@ -1,5 +1,6 @@
-import time
+# import time
 import os.path
+from IFCCustomDelegate import *
 from IFCQt3DView import *
 from IFCTreeWidget import *
 from IFCPropertyWidget import *
@@ -257,7 +258,7 @@ def main():
     w = QIFCViewer(use_3d=True)
     w.setWindowTitle("IFC Viewer")
     w.resize(1280, 800)
-    filename = sys.argv[1]
+    filename = sys.argv[1] if len(sys.argv) >= 2 else ''
     if os.path.isfile(filename):
         w.load_file(filename)
         w.setWindowTitle(w.windowTitle() + " - " + os.path.basename(filename))

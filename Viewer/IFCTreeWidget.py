@@ -11,22 +11,7 @@ except Exception:
     from PySide2.QtWidgets import *
 
 import ifcopenshell
-
-
-def entity_summary(entity):
-    """
-    Return a multi-line string containing a summary of information about
-    the IFC entity instance (STEP Id, Name, Class and GlobalId).
-    Can be used in a Tooltip.
-
-    :param entity: The IFC entity instance
-    """
-    myId = str(entity.id()) if hasattr(entity, "id") else "<no id>"
-    myName = entity.Name if hasattr(entity, "Name") else "<no name>"
-    myClass = entity.is_a() if hasattr(entity, "is_a") else "<no class>"
-    myGlobalId = entity.GlobalId if hasattr(entity, "GlobalId") else "<no GlobalId>"
-    return str("STEP id\t: #{}\nName\t: {}\nClass\t: {}\nGlobalId\t: {}").format(
-        myId, myName, myClass, myGlobalId)
+from IFCCustomDelegate import *
 
 
 class IFCTreeWidget(QWidget):
