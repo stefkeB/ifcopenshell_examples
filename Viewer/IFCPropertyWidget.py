@@ -103,9 +103,9 @@ class IFCPropertyWidget(QWidget):
         delegate.set_allowed_column(1)
         delegate.send_update_object.connect(self.send_update_object)  # to warn name changes
         self.property_tree.setItemDelegate(delegate)
-        # self.property_tree.setEditTriggers(QAbstractItemView.CurrentChanged)  # open editor upon first click
+        self.property_tree.setEditTriggers(QAbstractItemView.CurrentChanged)  # open editor upon first click
         # self.property_tree.setEditTriggers(QAbstractItemView.NoEditTriggers)  # Not editable tree
-        # self.property_tree.setItemDelegateForColumn(1, QCustomDelegate(self))
+        # self.property_tree.setItemDelegateForColumn(1, delegate)
         self.model = None
         self.reset()
         vbox.addWidget(self.property_tree)
@@ -264,7 +264,9 @@ class IFCPropertyWidget(QWidget):
         """
         for index, prop in enumerate(property_set.HasProperties):
             if self.show_all:
-                self.add_attributes_in_tree(prop, parent_item)
+                prop_item0 = QStandardItem("[" + str(index) + "]")
+                parent_item.appendRow([prop_item0])
+                self.add_attributes_in_tree(prop, prop_item0)
             else:
                 unit = str(prop.Unit) if hasattr(prop, 'Unit') else ''
                 prop_value = '<not handled>'
@@ -492,6 +494,18 @@ class IFCPropertyWidget(QWidget):
                         self.add_properties_in_tree(property_set, prop_item0)
                     elif property_set.is_a('IfcElementQuantity'):
                         self.add_quantities_in_tree(property_set, prop_item0)
+        if self.follow_properties and hasattr(ifc_object, 'HasPropertySets'):
+            buffer = "HasPropertySets [" + str(len(ifc_object.HasPropertySets)) + "]"
+            defines_item0 = QStandardItem(buffer)
+            defines_item1 = QStandardItem(get_friendly_ifc_name(ifc_object))
+            self.model.invisibleRootItem().appendRow([defines_item0, defines_item1])
+            for property_set in ifc_object.HasPropertySets:
+                prop_item0 = QStandardItem(property_set.Name)
+                prop_item0.setData(property_set, Qt.UserRole)
+                prop_item1 = QStandardItem(get_friendly_ifc_name(property_set))
+                prop_item2 = QStandardItem(property_set.GlobalId)
+                defines_item0.appendRow([prop_item0, prop_item1, prop_item2])
+                self.add_properties_in_tree(property_set, prop_item0)
 
         # Associations (Materials, Classification, ...)
         if self.follow_associations and hasattr(ifc_object, 'HasAssociations'):
