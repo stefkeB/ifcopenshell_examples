@@ -95,6 +95,8 @@ class IFCQt3dView(QWidget):
         self.grids.setObjectName("Grids")
         self.grids.setParent(self.scene)
         self.grids.setProperty("IsProduct", True)
+        self.display_edges = True
+        self.display_meshes = True
 
         self.files = QEntity()
         self.files.setObjectName("Models")
@@ -208,6 +210,22 @@ class IFCQt3dView(QWidget):
         btn_update_tree.setToolTip("Update Scenegraph Tree")
         btn_update_tree.pressed.connect(self.update_scene_graph_tree)
         hbox.addWidget(btn_update_tree)
+        # Option: Display Meshes
+        check_ms = QCheckBox("Meshes")
+        check_ms.setToolTip("Display all meshes")
+        check_ms.setChecked(self.display_meshes)
+        check_ms.toggled.connect(self.toggle_meshes)
+        hbox.addWidget(check_ms)
+        # Option: Display Wireframe
+        check_wf = QCheckBox("Wireframe")
+        check_wf.setToolTip("Display all edges")
+        check_wf.setChecked(self.display_edges)
+        check_wf.toggled.connect(self.toggle_wireframe)
+        hbox.addWidget(check_wf)
+        btn_show_wireframe = QCheckBox("Wireframe")
+        btn_camera_store.setToolTip("Store the camera position")
+        btn_camera_store.pressed.connect(self.store_camera)
+        hbox.addWidget(btn_camera_store)
         # Stretchable Spacer
         spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
         hbox.addSpacerItem(spacer)
@@ -338,11 +356,25 @@ class IFCQt3dView(QWidget):
 
     def toggle_meshes(self):
         # Parse the whole Scenegraph and hide all branches with a Triangle Renderer
-        print("Not implemented")
 
-    def toggle_wireframe(self):
+        # iterate over children
+        for filename, model in self.model_nodes.items():
+            for ifc_entity in model.children():
+                for representation in ifc_entity.children():
+                    # self.update_scene_graph_tree(item, node_item)
+                    if representation.property("IsWireframe") is None:
+                        representation.setEnabled(not representation.isEnabled())
+
+    def toggle_wireframe(self, enabled=True):
         # Parse the whole Scenegraph and hide all branches with a Lines Renderer
-        print("Not implemented")
+
+        # iterate over children
+        for filename, model in self.model_nodes.items():
+            for ifc_entity in model.children():
+                for representation in ifc_entity.children():
+                    # self.update_scene_graph_tree(item, node_item)
+                    if representation.property("IsWireframe") is True:
+                        representation.setEnabled(not representation.isEnabled())
 
     # region SceneMethods
 
