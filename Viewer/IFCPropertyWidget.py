@@ -196,6 +196,9 @@ class IFCPropertyWidget(QWidget):
             att_type = ifc_object.attribute_type(att_idx)
             if not self.show_all and (att_type == ('ENTITY INSTANCE' or 'AGGREGATE OF ENTITY INSTANCE')):
                 att_value = ''
+            # but for properties, we can show a value
+            if not self.show_all and ifc_object.is_a('IfcPropertySingleValue') and att_name == 'NominalValue':
+                att_value = str(ifc_object.NominalValue.wrappedValue)
             attribute_item0 = QStandardItem(att_name)
             attribute_item1 = QStandardItem(att_value)
             attribute_item1.setToolTip(att_value)
@@ -204,6 +207,9 @@ class IFCPropertyWidget(QWidget):
             attribute_item1.setData(att_value, Qt.UserRole + 2)  # value
             attribute_item1.setData(att_type, Qt.UserRole + 3)  # type
             attribute_item1.setData(att_idx, Qt.UserRole + 4)  # index
+            if att_name == 'NominalValue':
+                attribute_item1.setData(ifc_object.NominalValue, Qt.UserRole + 5)  # sub_object
+                attribute_item1.setEditable(True)
             attribute_item2 = QStandardItem(att_type)
             if att_type in ['STRING', 'DOUBLE', 'INT', 'ENUMERATION']:
                 attribute_item1.setEditable(True)
