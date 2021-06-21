@@ -223,6 +223,13 @@ class IFCTreeWidget(QWidget):
                     if hasattr(rel, 'RelatedObjects'):
                         for related_object in rel.RelatedObjects:
                             self.add_object_in_tree(related_object, tree_item)
+            if hasattr(ifc_object, 'AssignedItems'):  # objects on layers
+                for rep in ifc_object.AssignedItems:
+                    # self.add_object_in_tree(rep, tree_item)
+                    # From Shape Representation to Product Definition Shape to Product?
+                    for prod_def_shape in rep.OfProductRepresentation:
+                        for prod in prod_def_shape.ShapeOfProduct:
+                            self.add_object_in_tree(prod, tree_item)
 
     def set_object_name_edit(self, item, column):
         """
