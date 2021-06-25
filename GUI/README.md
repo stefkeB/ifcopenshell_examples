@@ -19,6 +19,7 @@ This is a more advanced viewer, where a second tree is used to display type, pro
 
 ## ifc_schemaviewer.py
 
-A small Tree view of the IFC schema. You can switch between IFC2X3 and IFC4.
+A Tree view of the IFC schema. You can switch between IFC2X3 and IFC4 and lower or increase the amount of columns to display.
+You can also toggle the display of the Entities, Types, Enumerations and Selects.
 
 ![result](images/ifc_schemaviewer.png)
