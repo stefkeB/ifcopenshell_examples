@@ -17,14 +17,15 @@ class QIFCViewer(QMainWindow):
     - V5 = Supporting drag and drop of IFC files onto the app
     - V6 = Make the 3D view optional (switch)
     """
-    def __init__(self, use_3d=True):
+    def __init__(self):
         QMainWindow.__init__(self)
 
         # A dictionary referring to our files, based on name
         self.ifc_files = {}
         self.setAcceptDrops(True)
+        self.settings = QSettings()
 
-        self.USE_3D = use_3d
+        self.USE_3D = self.settings.value('USE_3D', True)
 
         # menu, actions and toolbar
         self.setUnifiedTitleAndToolBarOnMac(True)
@@ -69,6 +70,13 @@ class QIFCViewer(QMainWindow):
         action_quit.setStatusTip("Quit the application")
         action_quit.triggered.connect(qApp.quit)
         file_menu.addAction(action_quit)
+
+        # Option : USE 3D
+        self.check_3d = QCheckBox("Use 3D")
+        self.check_3d.setToolTip("Toggle the 3D Window (restart required!)")
+        self.check_3d.setChecked(self.USE_3D)
+        self.check_3d.toggled.connect(self.toggle_use_3d)
+        toolbar.addWidget(self.check_3d)
 
         self.setStatusBar(QStatusBar(self))
 
@@ -246,6 +254,11 @@ class QIFCViewer(QMainWindow):
         self.view_takeoff.close_files()
         self.setWindowTitle("IFC Viewer")
 
+    def toggle_use_3d(self):
+        self.USE_3D = not self.USE_3D
+        self.settings.setValue("USE_3D", self.USE_3D)
+
+
 
 # Our Main function
 def main():
@@ -255,7 +268,11 @@ def main():
     else:
         app = QApplication(sys.argv)
     app.setApplicationDisplayName("IFC Viewer")
-    w = QIFCViewer(use_3d=True)
+    app.setOrganizationName("sbuild")
+    app.setOrganizationDomain("sbuild.com")
+    app.setApplicationName("QIFCViewer")
+
+    w = QIFCViewer()
     w.setWindowTitle("IFC Viewer")
     w.resize(1280, 800)
     filename = sys.argv[1] if len(sys.argv) >= 2 else ''
