@@ -535,7 +535,7 @@ class IFCQt3dView(QWidget):
         settings.set(settings.USE_WORLD_COORDS, True)  # true = ignore transformation
         # settings.set(settings.SEW_SHELLS, True)  # true default - slightly slower?
         # settings.set(settings.GENERATE_UVS, True)  # true default
-        settings.set(settings.FASTER_BOOLEANS, True)  # merge opening Booleans before subtracting
+        # settings.set(settings.FASTER_BOOLEANS, True)  # merge opening Booleans before subtracting
         # settings.set(settings.DISABLE_TRIANGULATION, True)  # if using OCC formats
         # settings.set(settings.USE_BREP_DATA, True)  # use OCC BREP data
         # settings.set(settings.EXCLUDE_SOLIDS_AND_SURFACES, True)
