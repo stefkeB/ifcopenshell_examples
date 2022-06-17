@@ -23,7 +23,7 @@ class SchemaViewer(QWidget):
         # Schema Chooser
         self.current_schema = 'IFC2X3'
         self.schema_chooser = QComboBox()
-        self.schema_chooser.addItems(['IFC2X3', 'IFC4'])
+        self.schema_chooser.addItems(['IFC2X3', 'IFC4', 'IFC4x1','IFC4x2','IFC4x3_rc1','IFC4x3_rc2','IFC4x3_rc3','IFC4x3_rc4'])
         self.schema_chooser.activated[str].connect(self.set_schema)
         hbox.addWidget(self.schema_chooser)
 
