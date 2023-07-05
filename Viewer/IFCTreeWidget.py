@@ -84,7 +84,6 @@ class IFCTreeWidget(QWidget):
     deselect_object = pyqtSignal(object)
     send_selection_set = pyqtSignal(object)
 
-    # region Selection Methods
 
     def send_selection(self, selected_items, deselected_items):
         items = self.object_tree.selectedItems()

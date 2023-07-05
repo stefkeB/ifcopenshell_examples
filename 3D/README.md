@@ -2,7 +2,6 @@
 
 These are basic examples of parsing the 3D geometry from an IFC file, using PyQt and IfcOpenShell.
 
-
 ## Qt3d_minimal.py
 
 This is a minimal example of a 3D widget, using the Qt3d-libraries from the QtSDK.
