@@ -1,14 +1,6 @@
 import sys
 import os.path
-
-try:
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
-except Exception:
-    from PySide2.QtGui import *
-    from PySide2.QtCore import *
-    from PySide2.QtWidgets import *
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 import ifcopenshell
 
 
@@ -150,4 +142,4 @@ if __name__ == '__main__':
     if os.path.isfile(filename):
         w.load_file(filename)
         w.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

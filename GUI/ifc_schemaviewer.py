@@ -1,5 +1,7 @@
 import sys
-from PyQt5.QtWidgets import *
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QSizePolicy,
+                                QSpacerItem, QSpinBox, QTreeWidget, QTreeWidgetItem,
+                                QHBoxLayout, QVBoxLayout, QWidget)
 import ifcopenshell
 
 
@@ -24,7 +26,7 @@ class SchemaViewer(QWidget):
         self.current_schema = 'IFC2X3'
         self.schema_chooser = QComboBox()
         self.schema_chooser.addItems(['IFC2X3', 'IFC4', 'IFC4x1','IFC4x2','IFC4x3_rc1','IFC4x3_rc2','IFC4x3_rc3','IFC4x3_rc4'])
-        self.schema_chooser.activated[str].connect(self.set_schema)
+        self.schema_chooser.textActivated.connect(self.set_schema)
         hbox.addWidget(self.schema_chooser)
 
         # Column Count Chooser
@@ -218,4 +220,4 @@ if __name__ == '__main__':
     w = SchemaViewer()
     w.resize(600, 800)
     w.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
