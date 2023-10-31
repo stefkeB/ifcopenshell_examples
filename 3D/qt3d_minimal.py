@@ -123,7 +123,8 @@ class View3D(QWidget):
         geometry = shape.geometry
 
         # buffer example https://stackoverflow.com/questions/49049828/numpy-array-via-qbuffer-to-qgeometry
-        custom_mesh_renderer = Qt3DRender.QGeometryRenderer()
+        custom_mesh_entity = Qt3DCore.QEntity(self.root)
+        custom_mesh_renderer = Qt3DRender.QGeometryRenderer(custom_mesh_entity)
         custom_mesh_renderer.setPrimitiveType(Qt3DRender.QGeometryRenderer.PrimitiveType.Triangles)
         custom_geometry = Qt3DCore.QGeometry(custom_mesh_renderer)
 
@@ -131,7 +132,7 @@ class View3D(QWidget):
         position_data_buffer = Qt3DCore.QBuffer(custom_geometry)
         # position_data_buffer.setData(QByteArray(np.array(geometry.verts).astype(np.float32).tobytes()))
         position_data_buffer.setData(struct.pack('%sf' % len(geometry.verts), *geometry.verts))
-        position_attribute = Qt3DCore.QAttribute()
+        position_attribute = Qt3DCore.QAttribute(custom_geometry)
         position_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
         position_attribute.setBuffer(position_data_buffer)
         position_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
@@ -147,7 +148,7 @@ class View3D(QWidget):
             normals_data_buffer = Qt3DCore.QBuffer(custom_geometry)
             # normals_data_buffer.setData(QByteArray(np.array(geometry.normals).astype(np.float32).tobytes()))
             normals_data_buffer.setData(struct.pack('%sf' % len(geometry.normals), *geometry.normals))
-            normal_attribute = Qt3DCore.QAttribute()
+            normal_attribute = Qt3DCore.QAttribute(custom_geometry)
             normal_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
             normal_attribute.setBuffer(normals_data_buffer)
             normal_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
@@ -184,7 +185,7 @@ class View3D(QWidget):
         color_data_buffer = Qt3DCore.QBuffer(custom_geometry)
         # color_data_buffer.setData(QByteArray(np.array(color_list).astype(np.float32).tobytes()))
         color_data_buffer.setData(struct.pack('%sf' % len(color_list), *color_list))
-        color_attribute = Qt3DCore.QAttribute()
+        color_attribute = Qt3DCore.QAttribute(custom_geometry)
         color_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
         color_attribute.setBuffer(color_data_buffer)
         color_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
@@ -199,7 +200,7 @@ class View3D(QWidget):
         index_data_buffer = Qt3DCore.QBuffer(custom_geometry)
         # index_data_buffer.setData(QByteArray(np.array(geometry.faces).astype(np.uintc).tobytes()))
         index_data_buffer.setData(struct.pack("{}I".format(len(geometry.faces)), *geometry.faces))
-        index_attribute = Qt3DCore.QAttribute()
+        index_attribute = Qt3DCore.QAttribute(custom_geometry)
         index_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.UnsignedInt)
         index_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.IndexAttribute)
         index_attribute.setBuffer(index_data_buffer)
@@ -214,9 +215,8 @@ class View3D(QWidget):
         custom_mesh_renderer.setFirstInstance(0)
 
         # add everything to the scene
-        custom_mesh_entity = Qt3DCore.QEntity(self.root)
         custom_mesh_entity.addComponent(custom_mesh_renderer)
-        transform = Qt3DCore.QTransform()
+        transform = Qt3DCore.QTransform(custom_geometry)
         transform.setRotationX(-90)
         custom_mesh_entity.addComponent(transform)
         custom_mesh_entity.addComponent(self.material)
