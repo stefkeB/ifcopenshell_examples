@@ -5,19 +5,19 @@ import struct
 import multiprocessing
 
 try:
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
-    from PyQt5.Qt3DCore import *
-    from PyQt5.Qt3DExtras import *
-    from PyQt5.Qt3DRender import *
+    from PyQt6.QtCore import *
+    from PyQt6.QtGui import *
+    from PyQt6.QtWidgets import *
+    import PyQt6.Qt3DCore as Qt3DCore
+    import PyQt6.Qt3DExtras as Qt3DExtras
+    import PyQt6.Qt3DRender as Qt3DRender
 except Exception:
-    from PySide2.QtGui import *
-    from PySide2.QtCore import *
-    from PySide2.QtWidgets import *
-    from PySide2.Qt3DCore import *
-    from PySide2.Qt3DExtras import *
-    from PySide2.Qt3DRender import *
+    from PySide6.QtGui import *
+    from PySide6.QtCore import *
+    from PySide6.QtWidgets import *
+    from PySide6.Qt3DCore import Qt3DCore
+    from PySide6.Qt3DExtras import Qt3DExtras
+    from PySide6.Qt3DRender import Qt3DRender
 
 import ifcopenshell
 import ifcopenshell.geom
@@ -36,15 +36,15 @@ class View3D(QWidget):
         self.start = time.time()
 
         # 3D View
-        self.view = Qt3DWindow()
+        self.view = Qt3DExtras.Qt3DWindow()
         self.view.defaultFrameGraph().setClearColor(QColor("#4466ff"))
         self.container = self.createWindowContainer(self.view)
         self.container.setMinimumSize(QSize(200, 100))
-        self.container.setFocusPolicy(Qt.NoFocus)
+        self.container.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         # Prepare our scene
-        self.root = QEntity()
-        self.material = QPerVertexColorMaterial()
+        self.root = Qt3DCore.QEntity()
+        self.material = Qt3DExtras.QPerVertexColorMaterial()
         self.root.addComponent(self.material)
         self.material.setShareable(True)
         self.initialise_camera()
@@ -63,7 +63,7 @@ class View3D(QWidget):
         camera.setViewCenter(QVector3D(0, 0, 0))
 
         # for camera control
-        cam_controller = QOrbitCameraController(self.root)
+        cam_controller = Qt3DExtras.QOrbitCameraController(self.root)
         cam_controller.setLinearSpeed(50.0)
         cam_controller.setLookSpeed(180.0)
         cam_controller.setCamera(camera)
@@ -123,39 +123,39 @@ class View3D(QWidget):
         geometry = shape.geometry
 
         # buffer example https://stackoverflow.com/questions/49049828/numpy-array-via-qbuffer-to-qgeometry
-        custom_mesh_renderer = QGeometryRenderer()
-        custom_mesh_renderer.setPrimitiveType(QGeometryRenderer.Triangles)
-        custom_geometry = QGeometry(custom_mesh_renderer)
+        custom_mesh_renderer = Qt3DRender.QGeometryRenderer()
+        custom_mesh_renderer.setPrimitiveType(Qt3DRender.QGeometryRenderer.PrimitiveType.Triangles)
+        custom_geometry = Qt3DCore.QGeometry(custom_mesh_renderer)
 
         # Position Attribute
-        position_data_buffer = QBuffer(QBuffer.VertexBuffer, custom_geometry)
+        position_data_buffer = Qt3DCore.QBuffer(custom_geometry)
         # position_data_buffer.setData(QByteArray(np.array(geometry.verts).astype(np.float32).tobytes()))
         position_data_buffer.setData(struct.pack('%sf' % len(geometry.verts), *geometry.verts))
-        position_attribute = QAttribute()
-        position_attribute.setAttributeType(QAttribute.VertexAttribute)
+        position_attribute = Qt3DCore.QAttribute()
+        position_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
         position_attribute.setBuffer(position_data_buffer)
-        position_attribute.setVertexBaseType(QAttribute.Float)
+        position_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
         position_attribute.setVertexSize(3)  # 3 floats
         position_attribute.setByteOffset(0)  # start from first index
         position_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
         position_attribute.setCount(len(geometry.verts))  # vertices
-        position_attribute.setName(QAttribute.defaultPositionAttributeName())
+        position_attribute.setName(Qt3DCore.QAttribute.defaultPositionAttributeName())
         custom_geometry.addAttribute(position_attribute)
 
         # Normal Attribute
         if len(geometry.normals) > 0:
-            normals_data_buffer = QBuffer(QBuffer.VertexBuffer, custom_geometry)
+            normals_data_buffer = Qt3DCore.QBuffer(custom_geometry)
             # normals_data_buffer.setData(QByteArray(np.array(geometry.normals).astype(np.float32).tobytes()))
             normals_data_buffer.setData(struct.pack('%sf' % len(geometry.normals), *geometry.normals))
-            normal_attribute = QAttribute()
-            normal_attribute.setAttributeType(QAttribute.VertexAttribute)
+            normal_attribute = Qt3DCore.QAttribute()
+            normal_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
             normal_attribute.setBuffer(normals_data_buffer)
-            normal_attribute.setVertexBaseType(QAttribute.Float)
+            normal_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
             normal_attribute.setVertexSize(3)  # 3 floats
             normal_attribute.setByteOffset(0)  # start from first index
             normal_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
             normal_attribute.setCount(len(geometry.normals))  # vertices
-            normal_attribute.setName(QAttribute.defaultNormalAttributeName())
+            normal_attribute.setName(Qt3DCore.QAttribute.defaultNormalAttributeName())
             custom_geometry.addAttribute(normal_attribute)
 
         # Collect the colors via the materials (1 color per vertex)
@@ -181,27 +181,27 @@ class View3D(QWidget):
                 color_list[vertex * 3 + 2] = blue
 
         # Color Attribute
-        color_data_buffer = QBuffer(QBuffer.VertexBuffer, custom_geometry)
+        color_data_buffer = Qt3DCore.QBuffer(custom_geometry)
         # color_data_buffer.setData(QByteArray(np.array(color_list).astype(np.float32).tobytes()))
         color_data_buffer.setData(struct.pack('%sf' % len(color_list), *color_list))
-        color_attribute = QAttribute()
-        color_attribute.setAttributeType(QAttribute.VertexAttribute)
+        color_attribute = Qt3DCore.QAttribute()
+        color_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
         color_attribute.setBuffer(color_data_buffer)
-        color_attribute.setVertexBaseType(QAttribute.Float)
+        color_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
         color_attribute.setVertexSize(3)  # 3 floats
         color_attribute.setByteOffset(0)  # start from first index
         color_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
         color_attribute.setCount(len(color_list))  # colors (per vertex)
-        color_attribute.setName(QAttribute.defaultColorAttributeName())
+        color_attribute.setName(Qt3DCore.QAttribute.defaultColorAttributeName())
         custom_geometry.addAttribute(color_attribute)
 
         # Faces Index Attribute
-        index_data_buffer = QBuffer(QBuffer.IndexBuffer, custom_geometry)
+        index_data_buffer = Qt3DCore.QBuffer(custom_geometry)
         # index_data_buffer.setData(QByteArray(np.array(geometry.faces).astype(np.uintc).tobytes()))
         index_data_buffer.setData(struct.pack("{}I".format(len(geometry.faces)), *geometry.faces))
-        index_attribute = QAttribute()
-        index_attribute.setVertexBaseType(QAttribute.UnsignedInt)
-        index_attribute.setAttributeType(QAttribute.IndexAttribute)
+        index_attribute = Qt3DCore.QAttribute()
+        index_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.UnsignedInt)
+        index_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.IndexAttribute)
         index_attribute.setBuffer(index_data_buffer)
         index_attribute.setCount(len(geometry.faces))
         custom_geometry.addAttribute(index_attribute)
@@ -214,9 +214,9 @@ class View3D(QWidget):
         custom_mesh_renderer.setFirstInstance(0)
 
         # add everything to the scene
-        custom_mesh_entity = QEntity(self.root)
+        custom_mesh_entity = Qt3DCore.QEntity(self.root)
         custom_mesh_entity.addComponent(custom_mesh_renderer)
-        transform = QTransform()
+        transform = Qt3DCore.QTransform()
         transform.setRotationX(-90)
         custom_mesh_entity.addComponent(transform)
         custom_mesh_entity.addComponent(self.material)
@@ -237,7 +237,7 @@ def main():
         w.load_file(filename)
         w.setWindowTitle("IFC Viewer - " + filename)
         w.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
