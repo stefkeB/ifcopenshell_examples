@@ -3,13 +3,13 @@
 import re
 
 try:
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
+    from PyQt6.QtCore import *
+    from PyQt6.QtGui import *
+    from PyQt6.QtWidgets import *
 except Exception:
-    from PySide2.QtGui import *
-    from PySide2.QtCore import *
-    from PySide2.QtWidgets import *
+    from PySide6.QtGui import *
+    from PySide6.QtCore import *
+    from PySide6.QtWidgets import *
 
 import ifcopenshell
 
@@ -90,7 +90,7 @@ class QCustomDelegate(QItemDelegate):
     # https://stackoverflow.com/questions/41207485/how-to-create-combo-box-qitemdelegate
     # https://stackoverflow.com/questions/18068439/pyqt-simplest-working-example-of-a-combobox-inside-qtableview
 
-    send_update_object = pyqtSignal(object)
+    send_update_object = Signal(object)
 
     def __init__(self, parent):
         QItemDelegate.__init__(self, parent)
@@ -112,13 +112,13 @@ class QCustomDelegate(QItemDelegate):
         column = index.column()
         # parent = index.parent()
         if column == self.allowed_column or self.allowed_column == -1:
-            att_current_value = index.data(Qt.DisplayRole)
-            ifc_object = index.data(Qt.UserRole)
-            att_name = index.data(Qt.UserRole + 1)
-            att_value = index.data(Qt.UserRole + 2)
-            att_type = index.data(Qt.UserRole + 3)
-            att_index = index.data(Qt.UserRole + 4)
-            ifc_sub_object = index.data(Qt.UserRole + 5)
+            att_current_value = index.data(Qt.ItemDataRole.DisplayRole)
+            ifc_object = index.data(Qt.ItemDataRole.UserRole)
+            att_name = index.data(Qt.ItemDataRole.UserRole + 1)
+            att_value = index.data(Qt.ItemDataRole.UserRole + 2)
+            att_type = index.data(Qt.ItemDataRole.UserRole + 3)
+            att_index = index.data(Qt.ItemDataRole.UserRole + 4)
+            ifc_sub_object = index.data(Qt.ItemDataRole.UserRole + 5)
             target = ifc_object
             if ifc_sub_object is not None:
                 target = ifc_sub_object
@@ -183,13 +183,13 @@ class QCustomDelegate(QItemDelegate):
 
         column = index.column()
         if column == self.allowed_column or self.allowed_column == -1:
-            att_new_value = index.data(Qt.DisplayRole)
-            ifc_object = index.data(Qt.UserRole)
-            att_name = index.data(Qt.UserRole + 1)
-            att_value = index.data(Qt.UserRole + 2)
-            att_type = index.data(Qt.UserRole + 3)
-            att_index = index.data(Qt.UserRole + 4)
-            ifc_sub_object = index.data(Qt.UserRole + 5)
+            att_new_value = index.data(Qt.ItemDataRole.DisplayRole)
+            ifc_object = index.data(Qt.ItemDataRole.UserRole)
+            att_name = index.data(Qt.ItemDataRole.UserRole + 1)
+            att_value = index.data(Qt.ItemDataRole.UserRole + 2)
+            att_type = index.data(Qt.ItemDataRole.UserRole + 3)
+            att_index = index.data(Qt.ItemDataRole.UserRole + 4)
+            ifc_sub_object = index.data(Qt.ItemDataRole.UserRole + 5)
             # TODO: editing property in the Listing View? Get property as sub_object
             target = ifc_object
             if ifc_sub_object is not None:
@@ -267,12 +267,12 @@ class QCustomDelegate(QItemDelegate):
         column = index.column()
         # parent = index.parent()
         if column == self.allowed_column or self.allowed_column == -1:
-            ifc_object = index.data(Qt.UserRole)
-            att_name = index.data(Qt.UserRole + 1)
-            # att_value = index.data(Qt.UserRole + 2)
-            att_type = index.data(Qt.UserRole + 3)
-            # att_index = index.data(Qt.UserRole + 4)
-            ifc_sub_object = index.data(Qt.UserRole + 5)
+            ifc_object = index.data(Qt.ItemDataRole.UserRole)
+            att_name = index.data(Qt.ItemDataRole.UserRole + 1)
+            # att_value = index.data(Qt.ItemDataRole.UserRole + 2)
+            att_type = index.data(Qt.ItemDataRole.UserRole + 3)
+            # att_index = index.data(Qt.ItemDataRole.UserRole + 4)
+            ifc_sub_object = index.data(Qt.ItemDataRole.UserRole + 5)
             target = ifc_object
             if ifc_sub_object is not None:
                 target = ifc_sub_object

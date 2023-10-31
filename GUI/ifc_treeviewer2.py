@@ -2,13 +2,13 @@ import sys
 import os.path
 
 try:
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
+    from PyQt6.QtCore import *
+    from PyQt6.QtGui import *
+    from PyQt6.QtWidgets import *
 except Exception:
-    from PySide2.QtGui import *
-    from PySide2.QtCore import *
-    from PySide2.QtWidgets import *
+    from PySide6.QtGui import *
+    from PySide6.QtCore import *
+    from PySide6.QtWidgets import *
 import ifcopenshell
 
 
@@ -23,7 +23,7 @@ class ViewTree(QWidget):
         vbox.addWidget(self.object_tree)
         self.object_tree.setColumnCount(3)
         self.object_tree.setHeaderLabels(["Name", "Class", "ID"])
-        self.object_tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.object_tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.object_tree.selectionModel().selectionChanged.connect(self.add_data)
         # Property Tree
         self.property_tree = QTreeWidget()
@@ -150,4 +150,4 @@ if __name__ == '__main__':
     if os.path.isfile(filename):
         w.load_file(filename)
         w.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

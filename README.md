@@ -20,3 +20,5 @@ test qt3d_minimal.py with [IfcOpenHouse_IFC4.ifc](https://github.com/aothms/IfcO
 ```
 python 3D/qt3d_minimal.py IfcOpenHouse_IFC4.ifc
 ```
+for Viewer/IFCQt3DView.py PythonOcc-Core is needed
+micromamba install pythonocc-core
