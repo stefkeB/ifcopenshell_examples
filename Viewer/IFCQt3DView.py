@@ -7,6 +7,7 @@ import multiprocessing
 
 try:
     from PyQt6.QtCore import *
+    from PyQt6.QtCore import pyqtSignal as Signal
     from PyQt6.QtGui import *
     from PyQt6.QtWidgets import *
     import PyQt6.Qt3DCore as Qt3DCore

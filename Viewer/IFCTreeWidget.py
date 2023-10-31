@@ -3,6 +3,7 @@ import os.path
 
 try:
     from PyQt6.QtCore import *
+    from PyQt6.QtCore import pyqtSignal as Signal
     from PyQt6.QtGui import *
     from PyQt6.QtWidgets import *
 except Exception:
