@@ -1,5 +1,8 @@
 import sys
-from PyQt5.QtWidgets import *
+try:
+    from PyQt6.QtWidgets import *
+except Exception:
+    from PySide6.QtWidgets import *
 import ifcopenshell
 
 
@@ -24,7 +27,7 @@ class SchemaViewer(QWidget):
         self.current_schema = 'IFC2X3'
         self.schema_chooser = QComboBox()
         self.schema_chooser.addItems(['IFC2X3', 'IFC4', 'IFC4x1','IFC4x2','IFC4x3_rc1','IFC4x3_rc2','IFC4x3_rc3','IFC4x3_rc4'])
-        self.schema_chooser.activated[str].connect(self.set_schema)
+        self.schema_chooser.textActivated.connect(self.set_schema)
         hbox.addWidget(self.schema_chooser)
 
         # Column Count Chooser
@@ -64,7 +67,7 @@ class SchemaViewer(QWidget):
         hbox.addWidget(self.check_selects)
 
         # Stretchable Spacer
-        spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
+        spacer = QSpacerItem(10, 10, QSizePolicy.Policy.Expanding)
         hbox.addSpacerItem(spacer)
 
         # Object Tree
@@ -218,4 +221,4 @@ if __name__ == '__main__':
     w = SchemaViewer()
     w.resize(600, 800)
     w.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
