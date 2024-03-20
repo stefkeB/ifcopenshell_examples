@@ -6,9 +6,14 @@ try:
     from PyQt5.QtGui import *
     from PyQt5.QtWidgets import *
 except Exception:
-    from PySide2.QtGui import *
-    from PySide2.QtCore import *
-    from PySide2.QtWidgets import *
+    try:
+        from PySide2.QtGui import *
+        from PySide2.QtCore import *
+        from PySide2.QtWidgets import *
+    except Exception:
+        from PySide6.QtCore import *
+        from PySide6.QtGui import *
+        from PySide6.QtWidgets import *
 import ifcopenshell
 
 
