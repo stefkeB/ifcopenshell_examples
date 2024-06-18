@@ -2,13 +2,14 @@ import sys
 import os.path
 
 try:
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
+    from PyQt6.QtCore import *
+    from PyQt6.QtCore import pyqtSignal as Signal
+    from PyQt6.QtGui import *
+    from PyQt6.QtWidgets import *
 except Exception:
-    from PySide2.QtGui import *
-    from PySide2.QtCore import *
-    from PySide2.QtWidgets import *
+    from PySide6.QtGui import *
+    from PySide6.QtCore import *
+    from PySide6.QtWidgets import *
 
 import ifcopenshell
 from IFCCustomDelegate import *
@@ -53,7 +54,7 @@ class IFCTreeWidget(QWidget):
         self.check_c.toggled.connect(self.toggle_decomposition)
         hbox.addWidget(self.check_c)
         # Stretchable Spacer
-        spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
+        spacer = QSpacerItem(10, 10, QSizePolicy.Policy.Expanding)
         hbox.addSpacerItem(spacer)
         # Root Class Chooser
         self.root_class_chooser = QComboBox()
@@ -73,23 +74,23 @@ class IFCTreeWidget(QWidget):
         vbox.addWidget(self.object_tree)
         self.object_tree.setColumnCount(2)
         self.object_tree.setHeaderLabels(["Name", "Class"])
-        self.object_tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.object_tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.object_tree.selectionModel().selectionChanged.connect(self.send_selection)
         self.object_tree.itemDoubleClicked.connect(self.check_object_name_edit)
         self.object_tree.itemChanged.connect(self.set_object_name_edit)
 
     # region Selection Methods
 
-    select_object = pyqtSignal(object)
-    deselect_object = pyqtSignal(object)
-    send_selection_set = pyqtSignal(object)
+    select_object = Signal(object)
+    deselect_object = Signal(object)
+    send_selection_set = Signal(object)
 
 
     def send_selection(self, selected_items, deselected_items):
         items = self.object_tree.selectedItems()
         self.send_selection_set.emit(items)
         for item in items:
-            entity = item.data(0, Qt.UserRole)
+            entity = item.data(0, Qt.ItemDataRole.UserRole)
             if hasattr(entity, "GlobalId"):
                 GlobalId = entity.GlobalId
                 if GlobalId != '':
@@ -100,7 +101,7 @@ class IFCTreeWidget(QWidget):
         for index in deselected_items.indexes():
             if index.column() == 0:  # only for first column, to avoid repeats
                 item = self.object_tree.itemFromIndex(index)
-                entity = item.data(0, Qt.UserRole)
+                entity = item.data(0, Qt.ItemDataRole.UserRole)
                 if hasattr(entity, "GlobalId"):
                     GlobalId = entity.GlobalId
                     if GlobalId != '':
@@ -116,7 +117,7 @@ class IFCTreeWidget(QWidget):
         iterator = QTreeWidgetItemIterator(self.object_tree)
         while iterator.value():
             item = iterator.value()
-            entity = item.data(0, Qt.UserRole)
+            entity = item.data(0, Qt.ItemDataRole.UserRole)
             if entity is not None and hasattr(entity, "GlobalId"):
                 if entity.GlobalId == ids:
                     item.setSelected(not item.isSelected())
@@ -128,7 +129,7 @@ class IFCTreeWidget(QWidget):
         iterator = QTreeWidgetItemIterator(self.object_tree)
         while iterator.value():
             item = iterator.value()
-            entity = item.data(0, Qt.UserRole)
+            entity = item.data(0, Qt.ItemDataRole.UserRole)
             if entity == ifc_object:
                 # refresh my name
                 item.setText(0, ifc_object.Name)
@@ -177,7 +178,7 @@ class IFCTreeWidget(QWidget):
         """
         ifc_file = self.ifc_files[filename]
         root_item = QTreeWidgetItem([filename, 'File'])
-        root_item.setData(0, Qt.UserRole, ifc_file)
+        root_item.setData(0, Qt.ItemDataRole.UserRole, ifc_file)
         try:
             for item in ifc_file.by_type(self.root_class):
                 self.add_object_in_tree(item, root_item)
@@ -205,7 +206,7 @@ class IFCTreeWidget(QWidget):
         my_name = ifc_object.Name if hasattr(ifc_object, "Name") else ""
         tree_item = QTreeWidgetItem([my_name, ifc_object.is_a()])
         parent_item.addChild(tree_item)
-        tree_item.setData(0, Qt.UserRole, ifc_object)
+        tree_item.setData(0, Qt.ItemDataRole.UserRole, ifc_object)
         tree_item.setToolTip(0, entity_summary(ifc_object))
 
         if self.follow_decomposition:
@@ -240,7 +241,7 @@ class IFCTreeWidget(QWidget):
         """
         if item.text(1) == 'File':
             return
-        ifc_object = item.data(0, Qt.UserRole)
+        ifc_object = item.data(0, Qt.ItemDataRole.UserRole)
         if ifc_object is not None:
             if hasattr(ifc_object, "Name"):
                 ifc_object.Name = item.text(0)
@@ -284,12 +285,12 @@ class IFCTreeWidget(QWidget):
         self.root_class_chooser.clear()
         for _, file in self.ifc_files.items():
             for t in file.wrapped_data.types():
-                if self.root_class_chooser.findText(t, Qt.MatchFixedString) == -1:  # require exact matching!
+                if self.root_class_chooser.findText(t, Qt.MatchFlag.MatchFixedString) == -1:  # require exact matching!
                     self.root_class_chooser.addItem(t)
 
         # Add all available classes in the Combobox
         self.root_class_chooser.setEditable(False)
-        self.root_class_chooser.model().sort(0, Qt.AscendingOrder)
+        self.root_class_chooser.model().sort(0, Qt.SortOrder.AscendingOrder)
         self.root_class_chooser.setCurrentText(buffer)
 
     def regenerate_tree(self):
@@ -313,4 +314,4 @@ if __name__ == '__main__':
     if os.path.isfile(filename):
         w.load_file(filename)
         w.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

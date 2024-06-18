@@ -3,13 +3,14 @@ import os.path
 import csv
 
 try:
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
+    from PyQt6.QtCore import *
+    from PyQt6.QtCore import pyqtSignal as Signal
+    from PyQt6.QtGui import *
+    from PyQt6.QtWidgets import *
 except Exception:
-    from PySide2.QtGui import *
-    from PySide2.QtCore import *
-    from PySide2.QtWidgets import *
+    from PySide6.QtGui import *
+    from PySide6.QtCore import *
+    from PySide6.QtWidgets import *
 
 import ifcopenshell
 from IFCCustomDelegate import *
@@ -174,15 +175,15 @@ class StringListEditor(QWidget):
         remove.clicked.connect(self.remove_item)
         hbox.addWidget(remove)
         # Stretchable Spacer
-        spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
+        spacer = QSpacerItem(10, 10, QSizePolicy.Policy.Expanding)
         hbox.addSpacerItem(spacer)
 
         # List of Strings
         self.label_list = QListWidget()
         vbox.addWidget(self.label_list)
-        self.label_list.setDragDropMode(QListWidget.InternalMove)
+        self.label_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
 
-    apply_labels = pyqtSignal(object)
+    apply_labels = Signal(object)
 
     def set_labels(self, labels):
         # self.labels = labels
@@ -190,7 +191,7 @@ class StringListEditor(QWidget):
         self.label_list.addItems(labels)
         for index in range(self.label_list.count()):
             item = self.label_list.item(index)
-            item.setFlags(item.flags() | Qt.ItemIsEditable)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
 
     def apply(self):
         labels = []
@@ -200,7 +201,7 @@ class StringListEditor(QWidget):
 
     def insert_item(self):
         new_item = QListWidgetItem("<edit me>")
-        new_item.setFlags(new_item.flags() | Qt.ItemIsEditable)
+        new_item.setFlags(new_item.flags() | Qt.ItemFlag.ItemIsEditable)
 
         selection = self.label_list.selectedItems()
         if not selection:
@@ -264,7 +265,7 @@ class IFCListingWidget(QWidget):
         export.pressed.connect(self.export)
         hbox.addWidget(export)
         # Stretchable Spacer
-        spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
+        spacer = QSpacerItem(10, 10, QSizePolicy.Policy.Expanding)
         hbox.addSpacerItem(spacer)
         # Root Class Chooser
         self.root_class_chooser = QComboBox()
@@ -323,10 +324,10 @@ class IFCListingWidget(QWidget):
         self.model = QStandardItemModel(0, len(self.header), self)
         self.object_table.setModel(self.model)
         for c, h in enumerate(self.header):
-            self.model.setHeaderData(c, Qt.Horizontal, h)
+            self.model.setHeaderData(c, Qt.Orientation.Horizontal, h)
 
-        self.object_table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.object_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.object_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.object_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.object_table.selectionModel().selectionChanged.connect(self.send_selection)
 
     def edit(self):
@@ -428,15 +429,15 @@ class IFCListingWidget(QWidget):
 
                         new_item = QStandardItem(str(att_value))
                         if not editable:
-                            new_item.setFlags(new_item.flags() ^ Qt.ItemIsEditable)  # make uneditable
+                            new_item.setFlags(new_item.flags() ^ Qt.ItemFlag.ItemIsEditable)  # make uneditable
                         else:
-                            new_item.setFlags(new_item.flags() | Qt.ItemIsEditable)  # make editable
-                        new_item.setData(ifc_object, Qt.UserRole)
-                        new_item.setData(att_name, Qt.UserRole + 1)  # name
-                        new_item.setData(att_value, Qt.UserRole + 2)  # value
-                        new_item.setData(att_type, Qt.UserRole + 3)  # type
-                        new_item.setData(att_idx, Qt.UserRole + 4)  # index
-                        new_item.setData(ifc_sub_object, Qt.UserRole + 5)  # sub object
+                            new_item.setFlags(new_item.flags() | Qt.ItemFlag.ItemIsEditable)  # make editable
+                        new_item.setData(ifc_object, Qt.ItemDataRole.UserRole)
+                        new_item.setData(att_name, Qt.ItemDataRole.UserRole + 1)  # name
+                        new_item.setData(att_value, Qt.ItemDataRole.UserRole + 2)  # value
+                        new_item.setData(att_type, Qt.ItemDataRole.UserRole + 3)  # type
+                        new_item.setData(att_idx, Qt.ItemDataRole.UserRole + 4)  # index
+                        new_item.setData(ifc_sub_object, Qt.ItemDataRole.UserRole + 5)  # sub object
                         buffer = "ifc_object:\t#" + str(ifc_object.id())
                         buffer += "\natt_name:\t" + str(att_name)
                         buffer += "\natt_value:\t" + str(att_value)
@@ -454,9 +455,9 @@ class IFCListingWidget(QWidget):
 
     # region Selection Methods
 
-    select_object = pyqtSignal(object)
-    deselect_object = pyqtSignal(object)
-    send_selection_set = pyqtSignal(object)
+    select_object = Signal(object)
+    deselect_object = Signal(object)
+    send_selection_set = Signal(object)
 
     def send_selection(self, selected_items, deselected_items):
         # selection_model = self.object_table.selectionModel()
@@ -465,7 +466,7 @@ class IFCListingWidget(QWidget):
         # for item in items:
         for index in selected_items.indexes():
             if index.column() == 0:  # only for first column, to avoid repeats
-                entity = index.data(Qt.UserRole)
+                entity = index.data(Qt.ItemDataRole.UserRole)
                 if hasattr(entity, "GlobalId"):
                     GlobalId = entity.GlobalId
                     if GlobalId != '':
@@ -475,7 +476,7 @@ class IFCListingWidget(QWidget):
         # send the deselected items as well
         for index in deselected_items.indexes():
             if index.column() == 0:  # only for first column, to avoid repeats
-                entity = index.data(Qt.UserRole)
+                entity = index.data(Qt.ItemDataRole.UserRole)
                 if hasattr(entity, "GlobalId"):
                     GlobalId = entity.GlobalId
                     if GlobalId != '':
@@ -487,7 +488,7 @@ class IFCListingWidget(QWidget):
         selection_model = self.object_table.selectionModel()
         # check if already selected
         index = selection_model.currentIndex()
-        entity = index.data(Qt.UserRole)
+        entity = index.data(Qt.ItemDataRole.UserRole)
         if entity is not None and hasattr(entity, "GlobalId"):
             if entity.GlobalId == ids:
                 return
@@ -497,7 +498,7 @@ class IFCListingWidget(QWidget):
 
         for r in range(self.model.rowCount()):
             index = self.model.index(r, 0)  # only for first column, to avoid repeats
-            entity = index.data(Qt.UserRole)
+            entity = index.data(Qt.ItemDataRole.UserRole)
             if entity is not None and hasattr(entity, "GlobalId"):
                 if entity.GlobalId == ids:
                     self.object_table.selectRow(r)
@@ -534,4 +535,4 @@ if __name__ == '__main__':
         w.load_file(sys.argv[1])
     # finally display the window & execute the app
     w.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

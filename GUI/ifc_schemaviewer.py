@@ -13,7 +13,6 @@ except Exception:
         from PySide6.QtGui import *
         from PySide6.QtWidgets import *
 import ifcopenshell
-import ifcopenshell
 
 
 class SchemaViewer(QWidget):
@@ -78,7 +77,7 @@ class SchemaViewer(QWidget):
         hbox.addWidget(self.check_selects)
 
         # Stretchable Spacer
-        spacer = QSpacerItem(10, 10, QSizePolicy.Expanding)
+        spacer = QSpacerItem(10, 10, QSizePolicy.Policy.Expanding)
         hbox.addSpacerItem(spacer)
 
         # Object Tree
@@ -232,4 +231,4 @@ if __name__ == '__main__':
     w = SchemaViewer()
     w.resize(600, 800)
     w.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

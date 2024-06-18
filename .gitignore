@@ -129,6 +129,3 @@ dmypy.json
 .pyre/
 .DS_Store
 .vscode/launch.json
-
-# IDE support
-.idea/

@@ -215,7 +215,7 @@ class QIFCViewer(QMainWindow):
             dlg.setText(str("Do you want to save:\n{}?").format(ifc_filename))
             dlg.setDetailedText(str("When you click 'OK', you still have the chance of"
                                     "selecting a new name or location."))
-            button = dlg.exec_()
+            button = dlg.exec()
             if button == QMessageBox.Ok:
                 savepath = QFileDialog.getSaveFileName(self, caption="Save IFC File",
                                                        directory=ifc_filename,
@@ -280,7 +280,7 @@ def main():
         w.load_file(filename)
         w.setWindowTitle(w.windowTitle() + " - " + os.path.basename(filename))
     w.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
