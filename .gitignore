@@ -127,5 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# ugly files
 .DS_Store
-.vscode/launch.json
+*.db
+
+# IDE support
+.vscode/
+
+.idea/
