@@ -211,6 +211,8 @@ class SchemaViewer(QWidget):
                 buffer.append(a_name)
 
             item = QTreeWidgetItem(buffer)
+            for t in range(0, entity.attribute_count()):
+                item.setToolTip(t, str(buffer[t]))
             if parent_item is not None:
                 parent_item.addChild(item)
             else:
