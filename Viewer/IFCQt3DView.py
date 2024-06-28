@@ -24,29 +24,38 @@ except Exception:
 
 import ifcopenshell
 import ifcopenshell.geom
-# https://github.com/IfcOpenShell/IfcOpenShell/blob/master/src/ifcopenshell-python/ifcopenshell/geom/occ_utils.py#L147
-import ifcopenshell.geom.occ_utils
-import OCC
-import OCC.Core.gp
-import OCC.Core.Geom
-import OCC.Core.AIS
 
-import OCC.Core.Bnd
-import OCC.Core.BRepBndLib
+USE_OCC = False
 
-import OCC.Core.BRep
-import OCC.Core.BRepPrimAPI
-import OCC.Core.BRepAlgoAPI
-import OCC.Core.BRepBuilderAPI
+try: 
+    # can we use the OCC tools? 
+    # https://github.com/IfcOpenShell/IfcOpenShell/blob/master/src/ifcopenshell-python/ifcopenshell/geom/occ_utils.py#L147
+    import ifcopenshell.geom.occ_utils
+    import OCC
+    import OCC.Core.gp
+    import OCC.Core.Geom
+    import OCC.Core.AIS
 
-import OCC.Core.GProp
-import OCC.Core.BRepGProp
+    import OCC.Core.Bnd
+    import OCC.Core.BRepBndLib
 
-import OCC.Core.TopoDS
-import OCC.Core.TopExp
-import OCC.Core.TopAbs
+    import OCC.Core.BRep
+    import OCC.Core.BRepPrimAPI
+    import OCC.Core.BRepAlgoAPI
+    import OCC.Core.BRepBuilderAPI
 
-from OCC.Core.Tesselator import ShapeTesselator
+    import OCC.Core.GProp
+    import OCC.Core.BRepGProp
+
+    import OCC.Core.TopoDS
+    import OCC.Core.TopExp
+    import OCC.Core.TopAbs
+
+    from OCC.Core.Tesselator import ShapeTesselator
+
+    USE_OCC = True
+except Exception:
+    USE_OCC = False
 
 from collections import namedtuple
 shape_tuple = namedtuple("shape_tuple", ("data", "geometry", "styles", "style_ids"))
@@ -63,6 +72,7 @@ class IFCQt3dView(QWidget):
     - V4 = Object Picking & Selection Syncing (+ reorganise scenegraph)
     - V5 = Working with multiple files (+ reorganise scenegraph again)
     - V6 = Revised Wireframe setup, improved highlights, select also in scenegraph
+    - V7 = Make OCC (pythonOCC Core) optional + Qt6 upgrade
     """
 
     # Two signals to extend or shrink the selection
@@ -283,7 +293,7 @@ class IFCQt3dView(QWidget):
         # Switch the Material from our Mesh Child
         if on is False:
             for c in entity.children():
-                c.removeComponent(self.mat_highlight)
+                c.removeComponent(self.mat_highlight) # TODO: not in Qt6
                 if c.property("IsTransparent") is True:
                     c.addComponent(self.transparent)
                 else:
@@ -548,7 +558,8 @@ class IFCQt3dView(QWidget):
         # settings.set_angular_tolerance(1)
         # settings.set_deflection_tolerance(1)  # default = 1e-3
 
-        settings.set(settings.USE_PYTHON_OPENCASCADE, True)
+        if USE_OCC:
+            settings.set(settings.USE_PYTHON_OPENCASCADE, True)
 
         # Two methods
         # self.parse_project(filename, settings)  # SLOWER - create geometry for each product
@@ -648,15 +659,24 @@ class IFCQt3dView(QWidget):
         counter = 0
         while True:
             shape = iterator.get()
+            if USE_OCC:
+                product = shape.data.product
+                id = shape.data.id
+            else:
+                product = shape.product
+                id = shape.id
             # skip openings and spaces geometry
-            if not shape.data.product.is_a('IfcOpeningElement') and not shape.data.product.is_a('IfcSpace'):
+            if not product.is_a('IfcOpeningElement') and not product.is_a('IfcSpace'):
                 try:
-                    self.generate_rendermesh(shape, self.model_nodes[filename])
+                    if USE_OCC:
+                        self.generate_rendermesh_OCC(shape, self.model_nodes[filename])
+                    else:
+                        self.generate_rendermesh(shape, self.model_nodes[filename])
                     print(str("Shape {0}\t[#{1}]\tin {2} seconds")
-                          .format(str(counter), str(shape.data.id), time.time() - self.start))
+                          .format(str(counter), str(id), time.time() - self.start))
                 except Exception as e:
                     print(str("Shape {0}\t[#{1}]\tERROR - {2} : {3}")
-                          .format(str(counter), str(shape.data.id), shape.data.product.is_a(), e))
+                          .format(str(counter), str(id), product.is_a(), e))
                     pass
             counter += 1
             if not iterator.next():
@@ -671,62 +691,198 @@ class IFCQt3dView(QWidget):
             if not product.is_a('IfcOpeningElement') and not product.is_a('IfcSpace'):
                 if product.Representation:
                     shape = ifcopenshell.geom.create_shape(settings, product)
-                    self.generate_rendermesh(shape, self.model_nodes[filename])
+                    if USE_OCC:
+                        self.generate_rendermesh_OCC(shape, self.model_nodes[filename])
+                    else:
+                        self.generate_rendermesh(shape, self.model_nodes[filename])
                     print(str("Product {0}\t[#{1}]\tin {2} seconds")
                           .format(str(counter), str(product.id()), time.time() - self.start))
             counter += 1
 
     def parse_shape(self, geometry):
-        # compute the tessellation
-        tess = ShapeTesselator(geometry)
-        tess.Compute(compute_edges=True)
-        # tess.Compute(compute_edges=False, mesh_quality=1.0, parallel=True)
-
-        # get the vertices
         vertices = []
-        vertex_count = tess.ObjGetVertexCount()
-        for i_vertex in range(0, vertex_count):
-            i1, i2, i3 = tess.GetVertex(i_vertex)
-            vertices.append(i1)
-            vertices.append(i2)
-            vertices.append(i3)
-
-        # get the normals
         normals = []
-        normals_count = tess.ObjGetNormalCount()
-        for i_normal in range(0, normals_count):
-            i1, i2, i3 = tess.GetNormal(i_normal)
-            normals.append(i1)
-            normals.append(i2)
-            normals.append(i3)
-
-        # get the triangles
         triangles = []
-        triangle_count = tess.ObjGetTriangleCount()
-        for i_triangle in range(0, triangle_count):
-            i1, i2, i3 = tess.GetTriangleIndex(i_triangle)
-            triangles.append(i1)
-            triangles.append(i2)
-            triangles.append(i3)
-
-        # get the edges
         edges = []
-        edge_count = tess.ObjGetEdgeCount()
-        for i_edge in range(0, edge_count):
-            vertex_count = tess.ObjEdgeGetVertexCount(i_edge)
-            # edge = []
+
+        if USE_OCC:
+            # compute the tessellation
+            tess = ShapeTesselator(geometry)
+            tess.Compute(compute_edges=True)
+            # tess.Compute(compute_edges=False, mesh_quality=1.0, parallel=True)
+
+            # get the vertices    
+            vertex_count = tess.ObjGetVertexCount()
             for i_vertex in range(0, vertex_count):
-                vertex = tess.GetEdgeVertex(i_edge, i_vertex)
-                # edge.append(vertex)
-                # edges.append(i_vertex)
-                edges.append(vertex[0])
-                edges.append(vertex[1])
-                edges.append(vertex[2])
-            # edges.append(edge)
+                i1, i2, i3 = tess.GetVertex(i_vertex)
+                vertices.append(i1)
+                vertices.append(i2)
+                vertices.append(i3)
+
+            # get the normals
+            normals_count = tess.ObjGetNormalCount()
+            for i_normal in range(0, normals_count):
+                i1, i2, i3 = tess.GetNormal(i_normal)
+                normals.append(i1)
+                normals.append(i2)
+                normals.append(i3)
+
+            # get the triangles
+            triangle_count = tess.ObjGetTriangleCount()
+            for i_triangle in range(0, triangle_count):
+                i1, i2, i3 = tess.GetTriangleIndex(i_triangle)
+                triangles.append(i1)
+                triangles.append(i2)
+                triangles.append(i3)
+
+            # get the edges
+            edge_count = tess.ObjGetEdgeCount()
+            for i_edge in range(0, edge_count):
+                vertex_count = tess.ObjEdgeGetVertexCount(i_edge)
+                # edge = []
+                for i_vertex in range(0, vertex_count):
+                    vertex = tess.GetEdgeVertex(i_edge, i_vertex)
+                    # edge.append(vertex)
+                    # edges.append(i_vertex)
+                    edges.append(vertex[0])
+                    edges.append(vertex[1])
+                    edges.append(vertex[2])
+                # edges.append(edge)
 
         return vertices, normals, triangles, edges
 
     def generate_rendermesh(self, shape, parent):
+        """
+        Collecting the mesh geometry using OpenCASCADE (but not the OCC Python wrapper).
+        The vertices, edges, triangles and colors are used to create the
+        Qt3D Entities & Nodes & Components for the 3D Representation.
+
+        :param shape: Wrapped Shape (from OpenCASCADE)
+        :param parent: Qt3DCore.QEntity parent Node (representing the File node)
+        """
+        geometry = shape.geometry
+
+        # buffer example https://stackoverflow.com/questions/49049828/numpy-array-via-qbuffer-to-qgeometry
+        custom_mesh_entity = Qt3DCore.QEntity(parent) # self.root)
+        custom_mesh_entity.setObjectName(shape.guid)
+        custom_mesh_entity.setProperty("IsProduct", True)
+        custom_mesh_entity.setProperty("GlobalId", shape.guid)
+
+        custom_mesh_renderer = Qt3DRender.QGeometryRenderer(custom_mesh_entity) # NEEDED to include the mesh entity!
+        custom_mesh_renderer.setObjectName("Mesh Renderer")
+        custom_mesh_renderer.setPrimitiveType(Qt3DRender.QGeometryRenderer.PrimitiveType.Triangles)
+        custom_geometry = Qt3DCore.QGeometry(custom_mesh_renderer) # custom_mesh_entity)
+        custom_geometry.setObjectName("Custom Geometry")
+
+        # Position Attribute
+        position_data_buffer = Qt3DCore.QBuffer(custom_geometry)
+        # position_data_buffer.setData(QByteArray(np.array(geometry.verts).astype(np.float32).tobytes()))
+        position_data_buffer.setData(struct.pack('%sf' % len(geometry.verts), *geometry.verts))
+        position_data_buffer.setObjectName("Position Data Buffer")
+        position_attribute = Qt3DCore.QAttribute(custom_geometry)
+        position_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
+        position_attribute.setBuffer(position_data_buffer)
+        position_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
+        position_attribute.setVertexSize(3)  # 3 floats
+        position_attribute.setByteOffset(0)  # start from first index
+        position_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
+        position_attribute.setCount(len(geometry.verts))  # vertices
+        position_attribute.setName(Qt3DCore.QAttribute.defaultPositionAttributeName())
+        position_attribute.setObjectName("Position Vertex Attribute")
+        custom_geometry.addAttribute(position_attribute)
+
+        # Normal Attribute
+        if len(geometry.normals) > 0:
+            normals_data_buffer = Qt3DCore.QBuffer(custom_geometry)
+            # normals_data_buffer.setData(QByteArray(np.array(geometry.normals).astype(np.float32).tobytes()))
+            normals_data_buffer.setData(struct.pack('%sf' % len(geometry.normals), *geometry.normals))
+            normals_data_buffer.setObjectName("Normals Data Buffer")
+            normal_attribute = Qt3DCore.QAttribute(custom_geometry)
+            normal_attribute.setAttributeType(Qt3DCore.QAttribute.VertexAttribute)
+            normal_attribute.setBuffer(normals_data_buffer)
+            normal_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
+            normal_attribute.setVertexSize(3)  # 3 floats
+            normal_attribute.setByteOffset(0)  # start from first index
+            normal_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
+            normal_attribute.setCount(len(geometry.normals))  # vertices
+            normal_attribute.setName(Qt3DCore.QAttribute.defaultNormalAttributeName())
+            normal_attribute.setObjectName("Normal Vertex Attribute")
+            custom_geometry.addAttribute(normal_attribute)
+
+        # Collect the colors via the materials (1 color per vertex)
+        color_list = [0.5] * len(geometry.verts)
+        for material_index in range(0, len(geometry.material_ids)):
+            # default color without material
+            red = 0.5
+            green = 1.0
+            blue = 0.5
+            alpha = 0.5
+            # From material index we get the material reference ID
+            mat_id = geometry.material_ids[material_index]
+            # Beware... this id can be -1 - so use a default color instead
+            if mat_id > -1:
+                material = geometry.materials[mat_id]
+                red = material.diffuse[0]
+                green = material.diffuse[1]
+                blue = material.diffuse[2]
+                if material.has_transparency:
+                    alpha = material.transparency # TODO: cannot put it somewhere? PerVertexColorMaterial does not support Alpha
+            # get the 3 related vertices for this face (three indices in vertex array)
+            for i in range(3):
+                vertex = geometry.faces[material_index * 3 + i]
+                color_list[vertex * 3] = red
+                color_list[vertex * 3 + 1] = green
+                color_list[vertex * 3 + 2] = blue
+
+        # Color Attribute
+        color_data_buffer = Qt3DCore.QBuffer(custom_geometry)
+        # color_data_buffer.setData(QByteArray(np.array(color_list).astype(np.float32).tobytes()))
+        color_data_buffer.setData(struct.pack('%sf' % len(color_list), *color_list))
+        color_data_buffer.setObjectName("Color Data Buffer")
+        color_attribute = Qt3DCore.QAttribute(custom_geometry)
+        color_attribute.setAttributeType(Qt3DCore.QAttribute.VertexAttribute)
+        color_attribute.setBuffer(color_data_buffer)
+        color_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
+        color_attribute.setVertexSize(3)  # 3 floats
+        color_attribute.setByteOffset(0)  # start from first index
+        color_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
+        color_attribute.setCount(len(color_list))  # colors (per vertex)
+        color_attribute.setName(Qt3DCore.QAttribute.defaultColorAttributeName())
+        color_attribute.setObjectName("Color Vertex Attribute")
+        custom_geometry.addAttribute(color_attribute)
+
+        # Faces Index Attribute
+        index_data_buffer = Qt3DCore.QBuffer(custom_geometry)
+        # index_data_buffer.setData(QByteArray(np.array(geometry.faces).astype(np.uintc).tobytes()))
+        index_data_buffer.setData(struct.pack("{}I".format(len(geometry.faces)), *geometry.faces))
+        index_data_buffer.setObjectName("Index Data Buffer")
+        index_attribute = Qt3DCore.QAttribute(custom_geometry)
+        index_attribute.setVertexBaseType(Qt3DCore.QAttribute.UnsignedInt)
+        # index_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.UnsignedInt)
+        index_attribute.setAttributeType(Qt3DCore.QAttribute.IndexAttribute)
+        index_attribute.setBuffer(index_data_buffer)
+        index_attribute.setCount(len(geometry.faces))
+        index_attribute.setName("Indices")
+        index_attribute.setObjectName("Index Unsigned Int Attribute")
+        custom_geometry.addAttribute(index_attribute)
+
+        # ----------------------------------------------------------------------------
+        # make the geometry visible with a renderer
+        custom_mesh_renderer.setGeometry(custom_geometry)
+        custom_mesh_renderer.setInstanceCount(1)
+        custom_mesh_renderer.setFirstVertex(0)
+        custom_mesh_renderer.setFirstInstance(0)
+
+        # add everything to the scene
+        custom_mesh_entity.addComponent(custom_mesh_renderer)
+        # custom_mesh_entity.setObjectName("Mesh")  # ifc_object.GlobalId)
+        custom_transform = Qt3DCore.QTransform(custom_geometry)
+        custom_transform.setRotationX(-90)
+        custom_transform.setObjectName("Rotation -90° Transform")
+        custom_mesh_entity.addComponent(custom_transform)
+        custom_mesh_entity.addComponent(self.material)
+
+    def generate_rendermesh_OCC(self, shape, parent):
         """
         Collecting the mesh geometry using OCC for the current TopoDS Shape.
         The vertices, edges, triangles and colors are used to create the
