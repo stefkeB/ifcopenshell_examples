@@ -25,6 +25,8 @@ except Exception:
 import ifcopenshell
 import ifcopenshell.geom
 
+import os
+os.environ['QT3D_RENDERER'] = 'opengl'
 USE_OCC = False
 
 try: 
@@ -291,24 +293,43 @@ class IFCQt3dView(QWidget):
         :param on: bool
         """
         # Switch the Material from our Mesh Child
+        # TODO: with OCC, the entity is in the Children
         if on is False:
-            for c in entity.children():
-                c.removeComponent(self.mat_highlight) # TODO: not in Qt6
-                if c.property("IsTransparent") is True:
-                    c.addComponent(self.transparent)
+            if USE_OCC is True:
+                for c in entity.children():
+                    c.removeComponent(self.mat_highlight) # TODO: not in Qt6
+                    if c.property("IsTransparent") is True:
+                        c.addComponent(self.transparent)
+                    else:
+                        c.addComponent(self.material)
+            else:
+                entity.removeComponent(self.mat_highlight) # TODO: not in Qt6
+                if entity.property("IsTransparent") is True:
+                    entity.addComponent(self.transparent)
                 else:
-                    c.addComponent(self.material)
+                    entity.addComponent(self.material)
+
             self.highlight_in_scene_graph(entity, False)
         else:
-            for c in entity.children():
-                if c.property("IsTransparent") is True:
-                    c.removeComponent(self.transparent)
+            if USE_OCC is True:
+                for c in entity.children():
+                    if c.property("IsTransparent") is True:
+                        c.removeComponent(self.transparent)
+                    else:
+                        c.removeComponent(self.material)
+                    if c.property("IsWireframe") is True:
+                        c.addComponent(self.material)
+                    else:
+                        c.addComponent(self.mat_highlight)
+            else:
+                if entity.property("IsTransparent") is True:
+                    entity.removeComponent(self.transparent)
                 else:
-                    c.removeComponent(self.material)
-                if c.property("IsWireframe") is True:
-                    c.addComponent(self.material)
+                    entity.removeComponent(self.material)
+                if entity.property("IsWireframe") is True:
+                    entity.addComponent(self.material)
                 else:
-                    c.addComponent(self.mat_highlight)
+                    entity.addComponent(self.mat_highlight)
             self.highlight_in_scene_graph(entity)
 
     def select_exclusive_entity(self, entity):
@@ -331,13 +352,18 @@ class IFCQt3dView(QWidget):
         entity = e.entity()
         if entity is None:
             return
-        # Picked mesh is child of container entity "parent"
-        parent = entity.parentEntity()
-        GlobalId = parent.objectName()
+        # With OCC Picked mesh is child of container entity "parent"
+        GlobalId = entity.objectName()
+        if USE_OCC is True:
+            parent = entity.parentEntity()
+            GlobalId = parent.objectName()
         print("IFCQt3dView.pick (" + GlobalId + ")")
 
         if e.button() == Qt.LeftButton and e.modifiers() == Qt.ControlModifier:
-            self.toggle_entity(parent)
+            if USE_OCC is True:
+                self.toggle_entity(parent)
+            else:
+                self.toggle_entity(entity)
         else:
             if e.button() == Qt.LeftButton and e.modifiers() == Qt.ShiftModifier:
                 # up = self.view.camera().upVector()
@@ -361,7 +387,10 @@ class IFCQt3dView(QWidget):
                     self.picking_sphere.addComponent(sphere_position)
                     # self.generate_axis(5, worldPosition)
             elif e.button() == Qt.LeftButton:
-                self.select_exclusive_entity(parent)
+                if USE_OCC is True:
+                    self.select_exclusive_entity(parent)
+                else:
+                    self.select_exclusive_entity(entity)
 
     # endregion
 
@@ -671,6 +700,7 @@ class IFCQt3dView(QWidget):
                     if USE_OCC:
                         self.generate_rendermesh_OCC(shape, self.model_nodes[filename])
                     else:
+                        self.generate_render_lines(shape, self.model_nodes[filename])
                         self.generate_rendermesh(shape, self.model_nodes[filename])
                     print(str("Shape {0}\t[#{1}]\tin {2} seconds")
                           .format(str(counter), str(id), time.time() - self.start))
@@ -751,6 +781,111 @@ class IFCQt3dView(QWidget):
 
         return vertices, normals, triangles, edges
 
+
+    def minimal_line(self, shape, parent):
+
+        self.geometry = Qt3DCore.QGeometry(self)
+        # Create a vertex buffer to hold the vertex data
+        points = QByteArray()
+        points.append(struct.pack('f', start.x()))
+        points.append(struct.pack('f', start.y()))
+        points.append(struct.pack('f', start.z()))
+        points.append(struct.pack('f', end.x()))
+        points.append(struct.pack('f', end.y()))
+        points.append(struct.pack('f', end.z()))
+        self.vertexBuffer = Qt3DCore.QBuffer(self.geometry)
+        self.vertexBuffer.setData(points)
+
+        # Create an attribute to hold the vertex data
+        attribute = Qt3DCore.QAttribute(self.geometry)
+        attribute.setName(Qt3DCore.QAttribute.defaultPositionAttributeName())
+        attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
+        attribute.setVertexSize(3)
+        attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
+        attribute.setBuffer(self.vertexBuffer)
+        attribute.setByteOffset(0)
+        attribute.setByteStride(3 * 4)
+        attribute.setCount(2)
+        self.geometry.addAttribute(attribute)
+
+        # Create a renderer to render the line
+        self.renderer = Qt3DRender.QGeometryRenderer()
+        self.renderer.setPrimitiveType(Qt3DRender.QGeometryRenderer.Lines)
+        self.renderer.setGeometry(self.geometry)
+        self.addComponent(self.renderer)
+
+    def generate_render_lines(self, shape, parent):
+        """
+        Collecting the edges geometry using OpenCASCADE (but not the OCC Python wrapper).
+        The vertices, edges, triangles and colors are used to create the
+        Qt3D Entities & Nodes & Components for the 3D Representation.
+
+        :param shape: Wrapped Shape (from OpenCASCADE)
+        :param parent: Qt3DCore.QEntity parent Node (representing the File node)
+        """
+        geometry = shape.geometry
+
+        custom_line_entity = Qt3DCore.QEntity(parent) # self.root)
+        custom_line_entity.setObjectName(shape.guid)
+        custom_line_entity.setProperty("IsProduct", True)
+        custom_line_entity.setProperty("GlobalId", shape.guid)
+
+        # ------ EDGES --------------------------
+        custom_line_renderer = Qt3DRender.QGeometryRenderer(custom_line_entity)
+        custom_line_renderer.setObjectName("Lines Renderer")
+        custom_line_renderer.setPrimitiveType(Qt3DRender.QGeometryRenderer.PrimitiveType.Lines)
+        custom_line_geometry = Qt3DCore.QGeometry(custom_line_renderer)
+        custom_line_geometry.setObjectName("Custom Lines Geometry")
+
+        # Position Attribute
+        position_data_buffer = Qt3DCore.QBuffer(custom_line_geometry)
+        # position_data_buffer.setData(QByteArray(np.array(edges).astype(np.float32).tobytes()))
+        position_data_buffer.setData(struct.pack('%sf' % len(geometry.verts), *geometry.verts)) # verts or edges?
+        position_data_buffer.setObjectName("Position Data Buffer")
+        position_attribute = Qt3DCore.QAttribute(custom_line_geometry)
+        position_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
+        position_attribute.setBuffer(position_data_buffer)
+        position_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
+        position_attribute.setVertexSize(3)  # 3 floats
+        position_attribute.setByteOffset(0)  # start from first index
+        position_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
+        position_attribute.setCount(len(geometry.verts))  # vertices
+        position_attribute.setName(Qt3DCore.QAttribute.defaultPositionAttributeName())
+        position_attribute.setObjectName("Position Vertex Attribute")
+        custom_line_geometry.addAttribute(position_attribute)
+
+        # Edges Index Attribute
+        indices_edges = list(range(int(len(geometry.edges) / 3))) # 3? # 2? # TODO: what is best here?
+        index_data_buffer = Qt3DCore.QBuffer(custom_line_geometry)
+        # index_data_buffer.setData(QByteArray(np.array(indices_edges).astype(np.uintc).tobytes()))
+        index_data_buffer.setData(struct.pack("{}I".format(len(indices_edges)), *indices_edges))
+        index_data_buffer.setObjectName("Index Data Buffer")
+        index_attribute = Qt3DCore.QAttribute(custom_line_geometry)
+        index_attribute.setVertexBaseType(Qt3DCore.QAttribute.UnsignedInt)
+        index_attribute.setAttributeType(Qt3DCore.QAttribute.IndexAttribute)
+        index_attribute.setBuffer(index_data_buffer)
+        index_attribute.setCount(len(indices_edges))
+        index_attribute.setName("Indices")
+        index_attribute.setObjectName("Index Unsigned Int Attribute")
+        custom_line_geometry.addAttribute(index_attribute)
+
+        # make the geometry visible with a renderer
+        custom_line_renderer.setGeometry(custom_line_geometry)
+        custom_line_renderer.setInstanceCount(1)
+        custom_line_renderer.setFirstVertex(0)
+        custom_line_renderer.setFirstInstance(0)
+
+        # add everything to the scene
+        # custom_line_entity = Qt3DCore.QEntity(custom_line_renderer)  # TODO: rethink scenegraph
+        # custom_line_entity.setObjectName("Line")
+        custom_line_entity.addComponent(custom_line_renderer)
+        custom_line_entity.setProperty("IsWireframe", True)
+        custom_transform = Qt3DCore.QTransform(custom_line_geometry)
+        custom_transform.setRotationX(-90)
+        custom_transform.setObjectName("Rotation -90° Transform")
+        custom_line_entity.addComponent(custom_transform)
+        custom_line_entity.addComponent(self.edge_material)
+
     def generate_rendermesh(self, shape, parent):
         """
         Collecting the mesh geometry using OpenCASCADE (but not the OCC Python wrapper).
@@ -767,13 +902,15 @@ class IFCQt3dView(QWidget):
         custom_mesh_entity.setObjectName(shape.guid)
         custom_mesh_entity.setProperty("IsProduct", True)
         custom_mesh_entity.setProperty("GlobalId", shape.guid)
+        print(f"Render Mesh for Global Id {shape.guid}")
 
+        # ------ MESH --------------------------
         custom_mesh_renderer = Qt3DRender.QGeometryRenderer(custom_mesh_entity) # NEEDED to include the mesh entity!
         custom_mesh_renderer.setObjectName("Mesh Renderer")
         custom_mesh_renderer.setPrimitiveType(Qt3DRender.QGeometryRenderer.PrimitiveType.Triangles)
         custom_geometry = Qt3DCore.QGeometry(custom_mesh_renderer) # custom_mesh_entity)
         custom_geometry.setObjectName("Custom Geometry")
-
+        
         # Position Attribute
         position_data_buffer = Qt3DCore.QBuffer(custom_geometry)
         # position_data_buffer.setData(QByteArray(np.array(geometry.verts).astype(np.float32).tobytes()))
@@ -798,7 +935,7 @@ class IFCQt3dView(QWidget):
             normals_data_buffer.setData(struct.pack('%sf' % len(geometry.normals), *geometry.normals))
             normals_data_buffer.setObjectName("Normals Data Buffer")
             normal_attribute = Qt3DCore.QAttribute(custom_geometry)
-            normal_attribute.setAttributeType(Qt3DCore.QAttribute.VertexAttribute)
+            normal_attribute.setAttributeType(Qt3DCore.QAttribute.AttributeType.VertexAttribute)
             normal_attribute.setBuffer(normals_data_buffer)
             normal_attribute.setVertexBaseType(Qt3DCore.QAttribute.VertexBaseType.Float)
             normal_attribute.setVertexSize(3)  # 3 floats
@@ -1105,12 +1242,19 @@ class IFCQt3dView(QWidget):
         else:
             color_list = colors
 
-        custom_line_renderer = Qt3DRender.QGeometryRenderer()
+        # Entity
+        custom_primitive_entity = Qt3DCore.QEntity(self.grids)
+        custom_primitive_entity.setObjectName("Custom Primitive Entity")
+
+        # Renderer
+        custom_line_renderer = Qt3DRender.QGeometryRenderer(custom_primitive_entity)
         custom_line_renderer.setPrimitiveType(primitive)
         custom_geometry = Qt3DCore.QGeometry(custom_line_renderer)
+        custom_geometry.setObjectName("Custom Geometry")
 
         # Position Attribute
         position_data_buffer = Qt3DCore.QBuffer(custom_geometry)
+        position_data_buffer.setObjectName("Position data buffer")
         # position_data_buffer.setData(QByteArray(np.array(coordinates).astype(np.float32).tobytes()))
         position_data_buffer.setData(struct.pack('%sf' % len(coordinates), *coordinates))
         position_attribute = Qt3DCore.QAttribute(custom_geometry)
@@ -1122,10 +1266,12 @@ class IFCQt3dView(QWidget):
         # position_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
         # position_attribute.setCount(len(coordinates))  # vertices
         position_attribute.setName(Qt3DCore.QAttribute.defaultPositionAttributeName())
+        position_attribute.setObjectName("Position attribute")
         custom_geometry.addAttribute(position_attribute)
 
         # Color Attribute
         color_data_buffer = Qt3DCore.QBuffer(custom_geometry)
+        color_data_buffer.setObjectName("Color data buffer")
         # color_data_buffer.setData(QByteArray(np.array(color_list).astype(np.float32).tobytes()))
         color_data_buffer.setData(struct.pack('%sf' % len(color_list), *color_list))
         color_attribute = Qt3DCore.QAttribute(custom_geometry)
@@ -1137,24 +1283,24 @@ class IFCQt3dView(QWidget):
         # color_attribute.setByteStride(3 * 4)  # 3 coordinates and 4 as length of float32 in bytes
         color_attribute.setCount(len(color_list))  # colors (per vertex)
         color_attribute.setName(Qt3DCore.QAttribute.defaultColorAttributeName())
+        color_attribute.setObjectName("Color attribute")
         custom_geometry.addAttribute(color_attribute)
 
         # ----------------------------------------------------------------------------
         # make the geometry visible with a renderer
         custom_line_renderer.setGeometry(custom_geometry)
+        custom_line_renderer.setObjectName("Custom Primitive Renderer")
         custom_line_renderer.setInstanceCount(1)
         custom_line_renderer.setFirstVertex(0)
         custom_line_renderer.setFirstInstance(0)
 
         # add everything to the scene
-        custom_line_entity = Qt3DCore.QEntity(self.grids)
-        custom_line_entity.setObjectName("Line")
         transform = Qt3DCore.QTransform(custom_geometry)
-        transform.setObjectName("Rotate X -90°")
+        transform.setObjectName("Rotate X -90° Transform")
         transform.setRotationX(-90)
-        custom_line_entity.addComponent(transform)
-        custom_line_entity.addComponent(custom_line_renderer)
-        custom_line_entity.addComponent(self.material)
+        custom_primitive_entity.addComponent(transform)
+        custom_primitive_entity.addComponent(custom_line_renderer)
+        custom_primitive_entity.addComponent(self.material)
 
     # endregion
 

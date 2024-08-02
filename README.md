@@ -11,13 +11,19 @@ A second objective is to collect all examples into one, more comprehensive IFC-v
 
 ## Setup instructions
 
-Use pip to install PySide6, PySide6-Essentials and PySide6-Addons (Qt6 based libraries).
+Use pip to install PyQt6 and the additional 3D libraries:
 
 ```sh
 pip install pyqt6 pyqt6-3d
 ```
 
-If you use manager such as mamba, or anaconda, it could look like this:
+Alternatively, you can also select PySide6, which includes PySide6-Essentials and PySide6-Addons (default Qt6 based Python wrapper):
+
+```sh
+pip install pyside6
+```
+
+If you use a package manager such as mamba, or anaconda, it could look like this:
 
 ```sh
 micromamba create -n bim python=3.12
@@ -39,4 +45,4 @@ The more elaborate viewer in `Viewer/IFCQt3DView.py` requires the [PythonOcc-Cor
 micromamba install pythonocc-core
 ```
 
-Beware, however that the OCC (OpenCascade wrapper) may be specific to a particular release of the OpenCascade libraries and you may have to search for a combination of ifcopenshell and OCC which are aligned.
+Beware, however that the OCC (OpenCascade wrapper) may be specific to a particular release of the OpenCascade libraries and you may have to search for a combination of ifcopenshell and OCC which are aligned. Since we weren't always succesful in compiling everyting, we made the use of OCC optional in the code, although that did introduce some additional code changes along the way.

@@ -16,6 +16,7 @@ class QIFCViewer(QMainWindow):
     - V4 = Syncing updates & edits of values between Object and Property Tree
     - V5 = Supporting drag and drop of IFC files onto the app
     - V6 = Make the 3D view optional (switch)
+    - V7 = Port to Qt6 (with optional OCC) + reshuffle scenegraph
     """
     def __init__(self):
         QMainWindow.__init__(self)
@@ -253,6 +254,8 @@ class QIFCViewer(QMainWindow):
             self.view_3d.close_files()
         self.view_takeoff.close_files()
         self.setWindowTitle("IFC Viewer")
+
+    # endregion
 
     def toggle_use_3d(self):
         self.USE_3D = not self.USE_3D
